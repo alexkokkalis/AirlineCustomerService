@@ -39,6 +39,8 @@ CREATE TABLE seats (
     seat_number TEXT NOT NULL,
     cabin TEXT NOT NULL CHECK (cabin IN ('economy', 'business')),
     seat_type TEXT NOT NULL CHECK (seat_type IN ('standard', 'preferred', 'extra_legroom', 'business')),
+    position TEXT NOT NULL CHECK (position IN ('window', 'middle', 'aisle')),
+    is_exit_row INTEGER NOT NULL DEFAULT 0 CHECK (is_exit_row IN (0, 1)),
     UNIQUE (flight_id, seat_number)
 );
 

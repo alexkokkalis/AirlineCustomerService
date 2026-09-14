@@ -77,25 +77,26 @@ FLIGHTS = [
 
 def create_seats(connection: sqlite3.Connection, flight_id: int, aircraft_code: str) -> None:
     """Seed a simple, consistent seat map for each flight."""
-    business_rows, economy_start, economy_end = {
-        "A320": (range(1, 4), 4, 28),
-        "A321": (range(1, 5), 5, 34),
-        "A350": (range(1, 11), 11, 55),
+    business_rows, economy_start, economy_end, exit_rows = {
+        "A320": (range(1, 4), 4, 28, {4, 12}),
+        "A321": (range(1, 5), 5, 34, {5, 14}),
+        "A350": (range(1, 11), 11, 55, {11, 26}),
     }[aircraft_code]
+    seat_positions = {"A": "window", "B": "middle", "C": "aisle", "D": "aisle", "E": "middle", "F": "window"}
 
     business_seats = [
-        (flight_id, f"{row}{letter}", "business", "business")
+        (flight_id, f"{row}{letter}", "business", "business", seat_positions[letter], 0)
         for row in business_rows
         for letter in "ACDF"
     ]
     economy_seats = []
     for row in range(economy_start, economy_end + 1):
         for letter in "ABCDEF":
-            seat_type = "extra_legroom" if row == economy_start else "preferred" if row in {economy_start + 1, economy_end} else "standard"
-            economy_seats.append((flight_id, f"{row}{letter}", "economy", seat_type))
+            seat_type = "extra_legroom" if row in exit_rows else "preferred" if row < economy_start + 4 else "standard"
+            economy_seats.append((flight_id, f"{row}{letter}", "economy", seat_type, seat_positions[letter], int(row in exit_rows)))
 
     connection.executemany(
-        "INSERT INTO seats (flight_id, seat_number, cabin, seat_type) VALUES (?, ?, ?, ?)",
+        "INSERT INTO seats (flight_id, seat_number, cabin, seat_type, position, is_exit_row) VALUES (?, ?, ?, ?, ?, ?)",
         business_seats + economy_seats,
     )
 

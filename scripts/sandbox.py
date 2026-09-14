@@ -5,6 +5,8 @@ Examples:
   python3 scripts/sandbox.py flights LHR
   python3 scripts/sandbox.py seats 21
   python3 scripts/sandbox.py booking ION-ABC123
+  python3 scripts/sandbox.py policies
+  python3 scripts/sandbox.py policy pets
 """
 
 from __future__ import annotations
@@ -44,7 +46,8 @@ def show_seats(flight_id: int) -> None:
     rows = get(f"/flights/{flight_id}/seats") or []
     by_cabin: dict[str, list[str]] = {}
     for seat in rows:
-        by_cabin.setdefault(seat["cabin"], []).append(f"{seat['seat_number']} ({seat['seat_type']})")
+        exit_marker = ", exit row" if seat["is_exit_row"] else ""
+        by_cabin.setdefault(seat["cabin"], []).append(f"{seat['seat_number']} ({seat['position']}, {seat['seat_type']}{exit_marker})")
     for cabin, seats in by_cabin.items():
         print(f"\n{cabin.title()} available seats ({len(seats)}):")
         print(", ".join(seats))
@@ -59,11 +62,22 @@ def main() -> None:
     seats.add_argument("flight_id", type=int)
     booking = subparsers.add_parser("booking", help="Retrieve a booking by reference.")
     booking.add_argument("reference")
+    subparsers.add_parser("policies", help="List valid policy topics and their descriptions.")
+    policy = subparsers.add_parser("policy", help="Retrieve one exact top-level policy topic.")
+    policy.add_argument("topic", help="For example: pets or baggage")
     args = parser.parse_args()
     if args.command == "flights":
         show_flights(args.destination)
     elif args.command == "seats":
         show_seats(args.flight_id)
+    elif args.command == "policy":
+        result = get(f"/policies/{args.topic}")
+        if result:
+            print(json.dumps(result, indent=2))
+    elif args.command == "policies":
+        result = get("/policies")
+        if result:
+            print(json.dumps(result, indent=2))
     else:
         result = get(f"/bookings/{args.reference.upper()}")
         if result:

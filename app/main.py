@@ -17,6 +17,26 @@ ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = ROOT / "data" / "ionian_airlines.db"
 FARE_CABINS = {"economy_light": "economy", "economy_classic": "economy", "economy_plus": "economy", "business": "business"}
 MULTIPLIERS = {"economy_light": 1.0, "economy_classic": 1.2, "economy_plus": 1.55, "business": 3.2}
+PolicyTopic = Literal[
+    "fare_tiers",
+    "baggage",
+    "pets",
+    "special_assistance",
+    "check_in_and_flight_status",
+    "disruptions",
+    "voluntary_changes_and_refunds",
+    "ionian_loyalty",
+]
+POLICY_TOPIC_DESCRIPTIONS = {
+    "fare_tiers": "Fare benefits, restrictions, internal multipliers, and standard add-on rules.",
+    "baggage": "Cabin and checked-bag allowances, fees, limits, special items, and restricted items.",
+    "pets": "Pet eligibility, carrier and weight requirements, fees, documents, and assistance dogs.",
+    "special_assistance": "Mobility, medical-device, disability, and airport-assistance options and limits.",
+    "check_in_and_flight_status": "Check-in deadlines, boarding, seat rules, gates, and flight-status meanings.",
+    "disruptions": "Delays, cancellations, missed connections, rebooking, refunds, and compensation assessment.",
+    "voluntary_changes_and_refunds": "Customer-requested changes, cancellations, refunds, travel credit, and name corrections.",
+    "ionian_loyalty": "Bronze, Silver, and Gold qualification and benefits, including Gold Economy Plus pricing.",
+}
 
 app = FastAPI(title="Ionian Airlines Agent API", version="0.1.0")
 
@@ -70,6 +90,22 @@ def row_dict(row: sqlite3.Row | None) -> dict | None:
     return dict(row) if row else None
 
 
+def load_policy_section(topic: PolicyTopic) -> dict:
+    """Return one authoritative top-level section from the versioned policy source."""
+    try:
+        knowledge_base = json.loads((ROOT / "data" / "knowledge_base.json").read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise HTTPException(500, "Knowledge base is unavailable.") from error
+
+    return {
+        "topic": topic,
+        "description": POLICY_TOPIC_DESCRIPTIONS[topic],
+        "policy_version": knowledge_base["metadata"]["policy_version"],
+        "effective_date": knowledge_base["metadata"]["effective_date"],
+        "content": knowledge_base[topic],
+    }
+
+
 def get_customer(connection: sqlite3.Connection, customer: CustomerInput) -> sqlite3.Row:
     existing = None
     if customer.loyalty_number:
@@ -110,6 +146,26 @@ def health() -> dict:
     return {"status": "ok", "database": DATABASE_PATH.exists()}
 
 
+@app.get("/policies")
+def list_policy_topics() -> dict:
+    """Return the complete allowed topic catalogue for the get_policy tool."""
+    try:
+        metadata = json.loads((ROOT / "data" / "knowledge_base.json").read_text())["metadata"]
+    except (OSError, json.JSONDecodeError) as error:
+        raise HTTPException(500, "Knowledge base is unavailable.") from error
+    return {
+        "policy_version": metadata["policy_version"],
+        "effective_date": metadata["effective_date"],
+        "topics": [{"topic": topic, "description": description} for topic, description in POLICY_TOPIC_DESCRIPTIONS.items()],
+    }
+
+
+@app.get("/policies/{topic}")
+def get_policy(topic: PolicyTopic) -> dict:
+    """Retrieve one authoritative policy topic. Topic is restricted to the published catalogue."""
+    return load_policy_section(topic)
+
+
 @app.get("/flights")
 def search_flights(
     destination: str | None = Query(default=None, min_length=3, max_length=3),
@@ -142,7 +198,7 @@ def list_seats(flight_id: int, available_only: bool = True) -> list[dict]:
         flight = connection.execute("SELECT id FROM flights WHERE id = ?", (flight_id,)).fetchone()
         if not flight:
             raise HTTPException(404, "Flight not found.")
-        query = """SELECT s.seat_number, s.cabin, s.seat_type, CASE WHEN EXISTS (SELECT 1 FROM booking_segments bs WHERE bs.seat_id = s.id AND bs.status = 'confirmed') THEN 0 ELSE 1 END AS is_available FROM seats s WHERE s.flight_id = ?"""
+        query = """SELECT s.seat_number, s.cabin, s.seat_type, s.position, s.is_exit_row, CASE WHEN EXISTS (SELECT 1 FROM booking_segments bs WHERE bs.seat_id = s.id AND bs.status = 'confirmed') THEN 0 ELSE 1 END AS is_available FROM seats s WHERE s.flight_id = ?"""
         if available_only:
             query += " AND NOT EXISTS (SELECT 1 FROM booking_segments bs WHERE bs.seat_id = s.id AND bs.status = 'confirmed')"
         query += " ORDER BY s.cabin, s.seat_number"
