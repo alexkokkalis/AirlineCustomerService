@@ -6,15 +6,20 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+
+from app.guardrails import GuardrailLimits
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = ROOT / "data" / "ionian_airlines.db"
+API_EVENT_LOG_PATH = ROOT / "logs" / "api_events.jsonl"
 FARE_CABINS = {"economy_light": "economy", "economy_classic": "economy", "economy_plus": "economy", "business": "business"}
 MULTIPLIERS = {"economy_light": 1.0, "economy_classic": 1.2, "economy_plus": 1.55, "business": 3.2}
 PolicyTopic = Literal[
@@ -37,8 +42,62 @@ POLICY_TOPIC_DESCRIPTIONS = {
     "voluntary_changes_and_refunds": "Customer-requested changes, cancellations, refunds, travel credit, and name corrections.",
     "ionian_loyalty": "Bronze, Silver, and Gold qualification and benefits, including Gold Economy Plus pricing.",
 }
+AncillaryType = Literal["checked_bag", "pet", "special_item"]
+AncillaryOption = Literal[
+    "15kg",
+    "23kg",
+    "32kg",
+    "in_cabin",
+    "in_hold",
+    "standard_sports",
+    "heavy_sports",
+    "bicycle",
+    "oversized_sports",
+    "hold_instrument",
+]
 
 app = FastAPI(title="Ionian Airlines Agent API", version="0.1.0")
+
+
+def write_api_event(event: dict) -> None:
+    """Append a privacy-conscious structured event without affecting API availability."""
+    try:
+        API_EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with API_EVENT_LOG_PATH.open("a") as log_file:
+            log_file.write(json.dumps(event, separators=(",", ":")) + "\n")
+    except OSError:
+        # Logging must not break a customer-facing API request.
+        pass
+
+
+@app.middleware("http")
+async def log_api_request(request: Request, call_next):
+    """Log method, route, status, duration, and correlation ID—never request bodies."""
+    started_at = perf_counter()
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    status_code = 500
+    error_type = None
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception as error:
+        error_type = type(error).__name__
+        raise
+    finally:
+        write_api_event(
+            {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "event_type": "api_request",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": status_code,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "error_type": error_type,
+            }
+        )
 
 
 @contextmanager
@@ -80,22 +139,27 @@ class RescheduleInput(BaseModel):
 
 class AncillaryInput(BaseModel):
     booking_segment_id: int
-    ancillary_type: Literal["checked_bag", "special_item", "pet", "seat_selection"]
-    description: str = Field(min_length=3)
-    amount_eur: int = Field(ge=0)
-    details: dict = Field(default_factory=dict)
+    ancillary_type: AncillaryType
+    option: AncillaryOption = Field(description="Valid options: checked_bag: 15kg, 23kg, 32kg; pet: in_cabin, in_hold; special_item: standard_sports, heavy_sports, bicycle, oversized_sports, hold_instrument.")
+    animal_type: Literal["dog", "cat"] | None = Field(default=None, description="Required only for a pet.")
+    combined_weight_kg: float | None = Field(default=None, gt=0, le=32, description="Required for a pet; includes animal and carrier or kennel.")
+    weight_kg: float | None = Field(default=None, gt=0, le=32, description="Required for a special item.")
 
 
 def row_dict(row: sqlite3.Row | None) -> dict | None:
     return dict(row) if row else None
 
 
-def load_policy_section(topic: PolicyTopic) -> dict:
-    """Return one authoritative top-level section from the versioned policy source."""
+def load_knowledge_base() -> dict:
     try:
-        knowledge_base = json.loads((ROOT / "data" / "knowledge_base.json").read_text())
+        return json.loads((ROOT / "data" / "knowledge_base.json").read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise HTTPException(500, "Knowledge base is unavailable.") from error
+
+
+def load_policy_section(topic: PolicyTopic) -> dict:
+    """Return one authoritative top-level section from the versioned policy source."""
+    knowledge_base = load_knowledge_base()
 
     return {
         "topic": topic,
@@ -104,6 +168,60 @@ def load_policy_section(topic: PolicyTopic) -> dict:
         "effective_date": knowledge_base["metadata"]["effective_date"],
         "content": knowledge_base[topic],
     }
+
+
+def policy_priced_ancillary(connection: sqlite3.Connection, segment: sqlite3.Row, request: AncillaryInput) -> tuple[str, int, dict]:
+    """Validate a constrained ancillary request and return policy-owned booking data."""
+    policy = load_knowledge_base()
+    if request.ancillary_type == "checked_bag":
+        options = {f"{item['weight_kg']}kg": item["price_eur"] for item in policy["baggage"]["checked_baggage"]["additional_bag_options"]}
+        if request.option not in options:
+            raise HTTPException(422, "Checked-bag option must be one of: 15kg, 23kg, 32kg.")
+        weight = int(request.option.removesuffix("kg"))
+        return f"One {weight} kg checked bag", options[request.option], {"weight_kg": weight}
+
+    if request.ancillary_type == "pet":
+        if request.option not in {"in_cabin", "in_hold"}:
+            raise HTTPException(422, "Pet option must be in_cabin or in_hold.")
+        if not request.animal_type or request.combined_weight_kg is None:
+            raise HTTPException(422, "Pet requests require animal_type and combined_weight_kg.")
+        departure = datetime.fromisoformat(segment["scheduled_departure_at_utc"].replace("Z", "+00:00"))
+        if departure < datetime.now(timezone.utc) + timedelta(hours=48):
+            raise HTTPException(409, "Pets must be booked at least 48 hours before departure.")
+        cabin_policy, hold_policy = policy["pets"]["in_cabin"], policy["pets"]["in_hold"]
+        if request.option == "in_cabin":
+            if request.combined_weight_kg > cabin_policy["maximum_combined_weight_kg"]:
+                raise HTTPException(422, "Pet and carrier exceed the 8 kg in-cabin limit; select in_hold if eligible.")
+            description, amount = "Pet in cabin", cabin_policy["fee_eur_per_direction"]
+            max_reservations = cabin_policy["maximum_carriers_per_flight"]
+        else:
+            if request.combined_weight_kg <= cabin_policy["maximum_combined_weight_kg"]:
+                raise HTTPException(422, "Pets at or below 8 kg must use the in_cabin option.")
+            description, amount = "Pet in hold", hold_policy["fee_eur_per_direction"]
+            max_reservations = hold_policy["maximum_reservations_per_flight"]
+        count = connection.execute("""SELECT COUNT(*) FROM ancillaries a JOIN booking_segments bs ON bs.id = a.booking_segment_id WHERE bs.flight_id = ? AND a.ancillary_type = 'pet' AND a.description = ? AND a.status = 'confirmed'""", (segment["flight_id"], description)).fetchone()[0]
+        if count >= max_reservations:
+            raise HTTPException(409, f"No remaining {request.option} pet capacity on this flight.")
+        return description, amount, {"animal_type": request.animal_type, "combined_weight_kg": request.combined_weight_kg, "travel_mode": request.option}
+
+    policy_items = {item["category"]: item for item in policy["baggage"]["special_items"]["items"]}
+    special_items = {
+        "standard_sports": ("Standard sports equipment", 0),
+        "heavy_sports": ("Heavy sports equipment", 23),
+        "bicycle": ("Bicycle", 0),
+        "oversized_sports": ("Oversized sports equipment", 0),
+        "hold_instrument": ("Musical instrument in hold", 0),
+    }
+    if request.option not in special_items:
+        raise HTTPException(422, "Unsupported special-item option.")
+    if request.weight_kg is None:
+        raise HTTPException(422, "Special-item requests require weight_kg.")
+    category, min_exclusive_weight = special_items[request.option]
+    item_policy = policy_items[category]
+    max_weight = item_policy["weight_limit_kg"]
+    if request.weight_kg > max_weight or request.weight_kg <= min_exclusive_weight:
+        raise HTTPException(422, f"{request.option} must weigh over {min_exclusive_weight} kg and no more than {max_weight} kg.")
+    return category, item_policy["price_eur"], {"option": request.option, "weight_kg": request.weight_kg}
 
 
 def get_customer(connection: sqlite3.Connection, customer: CustomerInput) -> sqlite3.Row:
@@ -146,13 +264,16 @@ def health() -> dict:
     return {"status": "ok", "database": DATABASE_PATH.exists()}
 
 
+@app.get("/system/guardrails")
+def get_guardrails() -> dict:
+    """Expose non-sensitive refinement limits for development and monitoring."""
+    return {"limits": GuardrailLimits.from_environment().as_dict()}
+
+
 @app.get("/policies")
 def list_policy_topics() -> dict:
     """Return the complete allowed topic catalogue for the get_policy tool."""
-    try:
-        metadata = json.loads((ROOT / "data" / "knowledge_base.json").read_text())["metadata"]
-    except (OSError, json.JSONDecodeError) as error:
-        raise HTTPException(500, "Knowledge base is unavailable.") from error
+    metadata = load_knowledge_base()["metadata"]
     return {
         "policy_version": metadata["policy_version"],
         "effective_date": metadata["effective_date"],
@@ -234,12 +355,13 @@ def retrieve_booking(reference: str) -> dict:
 @app.post("/bookings/{reference}/ancillaries", status_code=201)
 def add_ancillary(reference: str, request: AncillaryInput) -> dict:
     with database() as connection:
-        segment = connection.execute("""SELECT bs.id FROM booking_segments bs JOIN bookings b ON b.id = bs.booking_id WHERE b.reference = ? AND bs.id = ? AND bs.status = 'confirmed'""", (reference.upper(), request.booking_segment_id)).fetchone()
+        segment = connection.execute("""SELECT bs.id, bs.flight_id, f.scheduled_departure_at_utc FROM booking_segments bs JOIN bookings b ON b.id = bs.booking_id JOIN flights f ON f.id = bs.flight_id WHERE b.reference = ? AND bs.id = ? AND bs.status = 'confirmed'""", (reference.upper(), request.booking_segment_id)).fetchone()
         if not segment:
             raise HTTPException(404, "Confirmed booking segment not found.")
-        cursor = connection.execute("INSERT INTO ancillaries (booking_segment_id, ancillary_type, description, amount_eur, details_json) VALUES (?, ?, ?, ?, ?)", (request.booking_segment_id, request.ancillary_type, request.description, request.amount_eur, json.dumps(request.details)))
-        connection.execute("UPDATE bookings SET total_amount_eur = total_amount_eur + ?, updated_at_utc = CURRENT_TIMESTAMP WHERE reference = ?", (request.amount_eur, reference.upper()))
-        return {"ancillary_id": cursor.lastrowid, "status": "confirmed", "amount_eur": request.amount_eur}
+        description, amount, details = policy_priced_ancillary(connection, segment, request)
+        cursor = connection.execute("INSERT INTO ancillaries (booking_segment_id, ancillary_type, description, amount_eur, details_json) VALUES (?, ?, ?, ?, ?)", (request.booking_segment_id, request.ancillary_type, description, amount, json.dumps(details)))
+        connection.execute("UPDATE bookings SET total_amount_eur = total_amount_eur + ?, updated_at_utc = CURRENT_TIMESTAMP WHERE reference = ?", (amount, reference.upper()))
+        return {"ancillary_id": cursor.lastrowid, "ancillary_type": request.ancillary_type, "option": request.option, "description": description, "status": "confirmed", "amount_eur": amount, "policy_version": load_knowledge_base()["metadata"]["policy_version"]}
 
 
 @app.post("/bookings/{reference}/cancel")

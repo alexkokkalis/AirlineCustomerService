@@ -156,6 +156,7 @@
       "maximum_combined_weight_kg": 8,
       "carrier_requirements": "Soft-sided, leak-proof, ventilated carrier up to 45 x 35 x 20 cm that fits beneath the seat.",
       "fee_eur_per_direction": 60,
+      "maximum_carriers_per_flight": 2,
       "availability": "Maximum two pet carriers per flight, subject to availability.",
       "cabin_access": "Pets are permitted in every cabin, including Business.",
       "seating_restrictions": ["No exit rows", "No bulkhead seats"],
@@ -164,6 +165,7 @@
     "in_hold": {
       "combined_weight_range_kg": "Over 8 kg up to 32 kg, including approved kennel.",
       "fee_eur_per_direction": 130,
+      "maximum_reservations_per_flight": 4,
       "over_32kg": "Cargo-only enquiry required."
     },
     "booking_and_documents": {
