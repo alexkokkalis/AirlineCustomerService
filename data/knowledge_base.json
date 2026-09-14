@@ -1,0 +1,338 @@
+{
+  "metadata": {
+    "airline_name": "Ionian Airlines",
+    "policy_version": "1.0.0",
+    "effective_date": "2026-09-13",
+    "currency": "EUR",
+    "scope": "These policies apply to flights operated by Ionian Airlines. Partner-operated flights may have different rules.",
+    "policy_topics": [
+      "fare_tiers",
+      "baggage",
+      "pets",
+      "special_assistance",
+      "check_in_and_flight_status",
+      "disruptions",
+      "voluntary_changes_and_refunds",
+      "ionian_loyalty"
+    ]
+  },
+  "fare_tiers": {
+    "economy_light": {
+      "cabin": "Economy",
+      "standard_price_multiplier": 1.0,
+      "changes": "Not permitted.",
+      "cancellation": "No fare refund; unused taxes are refundable.",
+      "no_show": "Fare is forfeited; unused taxes are refundable.",
+      "cabin_baggage": { "bags": 1, "weight_kg_per_bag": 15 },
+      "included_checked_baggage": [],
+      "advance_seat_selection": "Available from EUR 12.",
+      "check_in": "Online check-in opens 24 hours before departure. Airport check-in is not included.",
+      "boarding_group": 4,
+      "lounge_access": false,
+      "fast_track": false,
+      "miles_earning_percent": 25,
+      "upgrade_eligibility": "Not eligible for fare upgrades."
+    },
+    "economy_classic": {
+      "cabin": "Economy",
+      "standard_price_multiplier": 1.2,
+      "changes": "EUR 45 plus any fare difference.",
+      "cancellation": "Ionian Travel Credit, less a EUR 60 fee.",
+      "no_show": "Fare is forfeited; unused taxes are refundable.",
+      "cabin_baggage": { "bags": 1, "weight_kg_per_bag": 15 },
+      "included_checked_baggage": [],
+      "advance_seat_selection": "Standard seats included; preferred seats from EUR 15.",
+      "check_in": "Online check-in opens 30 hours before departure; airport check-in is included.",
+      "boarding_group": 3,
+      "lounge_access": false,
+      "fast_track": false,
+      "miles_earning_percent": 75,
+      "upgrade_eligibility": "Paid upgrade when available."
+    },
+    "economy_plus": {
+      "cabin": "Economy",
+      "standard_price_multiplier": 1.55,
+      "changes": "Fare difference only.",
+      "cancellation": "Refund to the original payment method, less a EUR 30 fee.",
+      "no_show": "Fare is forfeited; unused taxes are refundable.",
+      "cabin_baggage": { "bags": 1, "weight_kg_per_bag": 15 },
+      "included_checked_baggage": [],
+      "advance_seat_selection": "Preferred seats included; extra-legroom seats from EUR 20.",
+      "check_in": "Online check-in opens 30 hours before departure; airport check-in is included.",
+      "boarding_group": 2,
+      "lounge_access": false,
+      "fast_track": true,
+      "miles_earning_percent": 125,
+      "upgrade_eligibility": "Paid or miles upgrade when available."
+    },
+    "business": {
+      "cabin": "Business",
+      "standard_price_multiplier": 3.2,
+      "changes": "Free.",
+      "cancellation": "Fully refundable to the original payment method.",
+      "no_show": "Refund less EUR 150.",
+      "cabin_baggage": { "bags": 2, "weight_kg_per_bag": 15 },
+      "included_checked_baggage": [
+        { "bags": 2, "weight_kg_per_bag": 32 }
+      ],
+      "advance_seat_selection": "All available Business seats included.",
+      "check_in": "Online check-in opens 36 hours before departure; priority airport check-in is included.",
+      "boarding_group": "priority",
+      "lounge_access": true,
+      "fast_track": true,
+      "miles_earning_percent": 250,
+      "upgrade_eligibility": "Not applicable."
+    },
+    "shared_rules": {
+      "checked_bag_add_ons": [
+        { "weight_kg": 15, "price_eur": 35 },
+        { "weight_kg": 23, "price_eur": 50 },
+        { "weight_kg": 32, "price_eur": 65 }
+      ],
+      "pets": "Permitted in cabin or hold subject to the pet policy and applicable fee.",
+      "fare_downgrades": "Not permitted. Upgrades require payment of any fare difference."
+    }
+  },
+  "baggage": {
+    "personal_item": {
+      "included_for_all_passengers": true,
+      "maximum_dimensions_cm": { "length": 40, "width": 30, "depth": 15 },
+      "storage": "Must fit beneath the seat in front."
+    },
+    "cabin_baggage": {
+      "maximum_dimensions_cm": { "length": 55, "width": 40, "depth": 23 },
+      "weight_rule": "The applicable 15 kg limit applies to each cabin bag.",
+      "note": "The number of included cabin bags depends on fare tier."
+    },
+    "checked_baggage": {
+      "maximum_linear_dimensions_cm": 158,
+      "maximum_weight_kg_per_bag": 32,
+      "maximum_additional_bags_per_passenger": 3,
+      "first_23kg_bag_for_economy_light_classic_or_plus_eur": 50,
+      "additional_bag_options": [
+        { "weight_kg": 15, "price_eur": 35 },
+        { "weight_kg": 23, "price_eur": 50 },
+        { "weight_kg": 32, "price_eur": 65 }
+      ],
+      "overweight_rules": [
+        { "weight_range_kg": "23-27", "fee_eur": 40 },
+        { "weight_range_kg": "over 27 up to 32", "fee_eur": 70 },
+        { "weight_range_kg": "over 32", "outcome": "Not accepted; the bag must be repacked into separate bags." }
+      ],
+      "purchase_timing": {
+        "online_or_agent_prices": "Published bag prices apply.",
+        "airport_surcharge_eur_per_bag": 15,
+        "deadline": "Bags may be added until the applicable check-in deadline, subject to capacity."
+      }
+    },
+    "children_and_infants": {
+      "children": "Receive the same baggage allowance as adults on the same fare tier.",
+      "infant_without_seat": "Receives one 10 kg checked bag plus one complimentary foldable pushchair/pram or car seat."
+    },
+    "mobility_and_medical_equipment": "Carried free in addition to baggage allowance; see special assistance policy.",
+    "special_items": {
+      "general_rules": [
+        "Fees are per direction and are separate from the passenger's checked-baggage allowance.",
+        "Pre-book at least 48 hours before departure. Airport acceptance is subject to capacity and costs an additional EUR 15.",
+        "No special item above 32 kg is accepted.",
+        "Electric bicycles and electric scooters are not accepted because of lithium-battery restrictions."
+      ],
+      "items": [
+        { "category": "Infant or child equipment", "examples": ["foldable pram", "pushchair", "car seat", "travel cot"], "price": "Free for one pushchair/pram plus one car seat or travel cot per infant or child.", "conditions": "Tagged at check-in; may be gate-checked where operationally necessary." },
+        { "category": "Standard sports equipment", "examples": ["ski or snowboard set", "golf bag", "diving equipment", "fishing equipment"], "price_eur": 50, "weight_limit_kg": 23, "conditions": "One item or set per fee; pre-booking required." },
+        { "category": "Heavy sports equipment", "examples": ["sports equipment weighing over 23 kg"], "price_eur": 65, "weight_limit_kg": 32, "conditions": "Pre-booking required." },
+        { "category": "Bicycle", "examples": ["non-electric pedal bicycle"], "price_eur": 60, "weight_limit_kg": 32, "conditions": "Handlebars turned in, pedals removed, tyres partly deflated, and packed in a hard case or bike bag." },
+        { "category": "Oversized sports equipment", "examples": ["surfboard", "windsurf board", "kitesurf equipment"], "price_eur": 75, "weight_limit_kg": 32, "conditions": "Accepted only on flights with suitable capacity; pre-booking required." },
+        { "category": "Musical instrument in cabin", "examples": ["violin", "guitar"], "price": "Free if it meets cabin-bag limits; otherwise an adjacent seat must be purchased.", "conditions": "Must be safely stowed or secured to the purchased seat." },
+        { "category": "Musical instrument in hold", "examples": ["large instrument in hard case"], "price_eur": 65, "weight_limit_kg": 32, "conditions": "Hard case required; limited-liability warning applies." },
+        { "category": "Unlisted special equipment", "price": "EUR 50 up to 23 kg or EUR 65 up to 32 kg.", "conditions": "Requires review when dimensions are unusually large." }
+      ]
+    },
+    "restricted_items": "Dangerous goods, sharp objects, and lithium batteries are subject to safety restrictions. Customers must seek approval for unusual battery-powered equipment."
+  },
+  "pets": {
+    "accepted_animals": ["dogs", "cats"],
+    "in_cabin": {
+      "maximum_combined_weight_kg": 8,
+      "carrier_requirements": "Soft-sided, leak-proof, ventilated carrier up to 45 x 35 x 20 cm that fits beneath the seat.",
+      "fee_eur_per_direction": 60,
+      "availability": "Maximum two pet carriers per flight, subject to availability.",
+      "cabin_access": "Pets are permitted in every cabin, including Business.",
+      "seating_restrictions": ["No exit rows", "No bulkhead seats"],
+      "in_flight_rule": "The pet must remain inside a closed carrier throughout the flight."
+    },
+    "in_hold": {
+      "combined_weight_range_kg": "Over 8 kg up to 32 kg, including approved kennel.",
+      "fee_eur_per_direction": 130,
+      "over_32kg": "Cargo-only enquiry required."
+    },
+    "booking_and_documents": {
+      "advance_notice": "Required at least 48 hours before departure.",
+      "passenger_responsibility": "The passenger is responsible for destination-entry documents, vaccinations, health certificates, and any quarantine requirements.",
+      "cancellation": "Pet fee is refundable when cancelled more than 24 hours before departure; otherwise it is non-refundable."
+    },
+    "quantity": "One carrier per passenger. Up to two compatible animals may share a carrier if they remain within the weight limit.",
+    "assistance_dogs": "Travel free in cabin without the standard carrier or weight rule, subject to valid documentation and advance notice.",
+    "emotional_support_animals": "Treated as ordinary pets; no special exemption applies.",
+    "not_accepted": ["Brachycephalic breeds in the hold", "Sedated animals", "Pregnant animals"]
+  },
+  "special_assistance": {
+    "pricing": "All assistance is free regardless of fare tier.",
+    "notice": "Request at least 48 hours before departure where possible. Later requests are accepted where operationally possible but cannot be guaranteed until confirmed.",
+    "services": [
+      { "service": "Airport wheelchair", "details": "Assistance between check-in, gate, aircraft, connections, and baggage reclaim." },
+      { "service": "Walking-distance and steps assistance", "details": "Support for passengers who need help walking through the airport or cannot climb aircraft steps." },
+      { "service": "Cabin-seat assistance", "details": "Cabin crew can assist with boarding, reaching a seat, and deplaning." },
+      { "service": "Visual impairment support", "details": "Airport guidance, priority boarding, and free carriage of recognised assistance dogs." },
+      { "service": "Hearing impairment support", "details": "Written or digital updates and visual boarding notifications on request." },
+      { "service": "Hidden disability support", "details": "Quiet waiting area where available, priority boarding, and airport escort on request." }
+    ],
+    "mobility_aids": {
+      "rule": "Passenger-owned wheelchairs and mobility aids travel free in addition to baggage allowance.",
+      "cabin": "Canes, crutches, and compact aids may travel in cabin where safely stowed; larger aids travel in hold and are returned at the aircraft door where possible.",
+      "powered_devices": "Accepted free with advance notice and dimensions, weight, battery type, and battery instructions. Removable lithium batteries must travel in cabin with terminals protected."
+    },
+    "medical_equipment": {
+      "cpap_and_essential_devices": "Permitted in cabin at no charge with 48-hour advance notice where possible.",
+      "portable_oxygen_concentrator": "Allowed only if approved for air travel and advance approval includes battery-duration details.",
+      "on_board_oxygen": "Not provided by Ionian Airlines."
+    },
+    "limitations": [
+      "Cabin crew cannot lift passengers, feed passengers, administer medicine, assist in a lavatory, or provide continuous personal care.",
+      "A travel companion is required where a passenger cannot independently evacuate, communicate safety information, administer required medication, or perform personal care.",
+      "Exit-row seats cannot be allocated to passengers requiring assistance."
+    ],
+    "agent_information_to_collect": ["booking reference", "passenger name", "flight segments", "assistance type", "connection assistance needs", "mobility-aid dimensions, weight, and battery details", "medical-device details", "travelling companion details when required", "assistance-dog documentation when applicable"]
+  },
+  "check_in_and_flight_status": {
+    "deadlines": {
+      "domestic": { "airport_check_in_and_bag_drop_open_hours_before": 2, "airport_check_in_and_bag_drop_close_minutes_before": 45, "gate_close_minutes_before": 20 },
+      "european_international": { "airport_check_in_and_bag_drop_open_hours_before": 3, "airport_check_in_and_bag_drop_close_minutes_before": 60, "gate_close_minutes_before": 30 },
+      "long_haul": { "airport_check_in_and_bag_drop_open_hours_before": 3.5, "airport_check_in_and_bag_drop_close_minutes_before": 75, "gate_close_minutes_before": 45 }
+    },
+    "economy_light_airport_boarding_pass": "A EUR 20 service fee applies when an airport-issued boarding pass is needed, except when online check-in was unavailable due to a technical, document-verification, or accessibility requirement. Bag drop remains available for paid checked bags.",
+    "pre_boarding": "Passengers requiring special assistance, unaccompanied minors, and families with infants may pre-board.",
+    "seat_rules": {
+      "economy_light": "Seat assigned automatically at check-in unless purchased.",
+      "economy_classic": "Standard seat selection included.",
+      "economy_plus": "Preferred-seat selection included; extra-legroom seats cost EUR 20.",
+      "business": "Any available Business seat included.",
+      "exit_rows": "Passengers must meet safety and mobility requirements."
+    },
+    "gate_information": {
+      "domestic_normally_published_minutes_before": 90,
+      "international_or_long_haul_normally_published_minutes_before": 120,
+      "channels": ["Ionian app", "online flight-status page", "airport screens", "airport announcements"],
+      "rule": "Gate information is current but not guaranteed and can change at any time. The agent must retrieve a gate from the flight-status tool and must never invent a gate number."
+    },
+    "flight_statuses": {
+      "scheduled": "Operating at planned time; confirm departure time and normal arrival deadline.",
+      "boarding": "Boarding has started; provide gate and gate-closing time and advise the passenger to proceed immediately.",
+      "final_call": "Gate is about to close; provide gate and advise the passenger to proceed immediately.",
+      "delayed": "Departure time has moved later; state revised time and supplied reason.",
+      "gate_change": "Flight remains scheduled from a different gate; provide current gate and boarding deadline.",
+      "cancelled": "Flight will not operate; retrieve booking and offer disruption options.",
+      "departed": "Flight has left; booking is a no-show unless an eligible disruption exception applies.",
+      "arrived": "Flight has landed; provide actual arrival time and baggage-reclaim belt if available."
+    }
+  },
+  "disruptions": {
+    "principle": "This policy covers airline disruption. Voluntary passenger changes and cancellations use the voluntary changes and refunds policy.",
+    "events": {
+      "delay_under_2_hours": { "options": ["Keep current booking and monitor status"], "entitlements": ["Status updates"] },
+      "delay_2_to_under_3_hours": { "options": ["Travel on delayed flight", "One free same-day change to next available Ionian flight on same route"], "entitlements": ["EUR 15 refreshment voucher"] },
+      "delay_3_or_more_hours": { "options": ["Travel", "Free rebooking", "Refund of unused flight segments"], "entitlements": ["EUR 25 refreshment voucher", "Accommodation and airport transfers when overnight stay is required"] },
+      "cancellation": { "options": ["Free rebooking on next available Ionian service", "Rebook to later date within 14 days", "Refund unused flight segments"], "entitlements": ["Meals and refreshments", "Accommodation and transfers when awaiting rebooking requires an overnight stay"] },
+      "missed_protected_connection": { "options": ["Rebooking on next available Ionian service to final booked destination"], "entitlements": ["Meals and refreshments", "Accommodation and transfers when required"] },
+      "denied_boarding": { "options": ["Volunteer option when available", "Rebooking", "Refund"], "entitlements": ["Care support", "Compensation eligibility assessment"] }
+    },
+    "protected_connection": "All flights are on one Ionian booking reference. Separate or self-transfer tickets are not protected.",
+    "rebooking_rules": [
+      "Rebook in the original cabin or a higher cabin if needed, without extra charge.",
+      "For a protected connection, reroute to the final booked destination, not merely the missed connection airport.",
+      "Preserve paid seats or provide a comparable available seat where possible.",
+      "Preserve checked-baggage allowance, paid baggage, special items, special-assistance requests, and pet reservations where possible.",
+      "If a pet or special item cannot be accommodated, disclose that before confirmation and offer the next suitable flight or refund."
+    ],
+    "compensation_assessment": {
+      "rule": "Do not promise payment before final arrival delay and disruption cause are confirmed. Submit an eligibility review after the journey is complete.",
+      "standard_amounts_when_eligible": [
+        { "journey_type": "Domestic or short-haul", "condition": "Arrival 3 or more hours late or qualifying cancellation", "amount_eur": 250 },
+        { "journey_type": "European international", "condition": "Arrival 3 or more hours late or qualifying cancellation", "amount_eur": 400 },
+        { "journey_type": "Long-haul", "condition": "Arrival 3 or more hours late or qualifying cancellation", "amount_eur": 600 }
+      ],
+      "extraordinary_circumstances": ["severe weather", "air-traffic-control restrictions", "security incidents", "airport closure"],
+      "extraordinary_circumstances_rule": "Standard compensation is normally unavailable, but rebooking and refund rights remain available."
+    },
+    "agent_information_to_collect": ["booking reference", "flight status and disruption reason", "affected segments", "whether passenger is at airport", "connection itinerary", "pet, special-item, seat, and assistance requirements", "chosen resolution"]
+  },
+  "voluntary_changes_and_refunds": {
+    "applicability": "Applies when the passenger chooses to change or cancel. Disruption policy overrides these rules for eligible airline disruption.",
+    "deadline": "Complete a voluntary change or cancellation before the applicable airport check-in deadline. After that deadline, no-show rules apply.",
+    "route_changes": "Changes are for the same origin and destination. A new route requires cancellation and a new booking.",
+    "fare_difference": "A passenger pays any difference when a replacement flight costs more. Ionian does not refund a lower fare when the replacement flight costs less.",
+    "change_fee_application": "Per passenger, per changed itinerary; not per flight segment.",
+    "travel_credit": {
+      "applies_to": "Economy Classic voluntary cancellations.",
+      "value": "Paid fare less EUR 60 cancellation fee, plus refundable unused taxes.",
+      "validity": "12 months from issue date.",
+      "use": "Only the originally ticketed passenger may apply it to a new Ionian Airlines flight. Remaining balance remains available until expiry.",
+      "cash_redemption": false
+    },
+    "refund_processing": {
+      "time": "7 to 10 business days after approval.",
+      "method": "Original payment method when fare rules allow a monetary refund.",
+      "partial_itinerary": "Only unused segments are refundable after travel begins.",
+      "taxes": "Unused taxes are refundable even on non-refundable fares.",
+      "agent_rule": "Confirm exact fee and refund amount before submitting the request."
+    },
+    "paid_extras": {
+      "paid_seat": "Non-refundable after assignment; transferred to replacement flight where an equivalent seat is available.",
+      "extra_checked_bag": "Refundable if removed or cancelled at least 24 hours before departure; otherwise non-refundable.",
+      "sports_or_special_item": "Refundable if removed or cancelled at least 24 hours before departure; otherwise non-refundable.",
+      "pet_reservation": "Refundable if cancelled at least 24 hours before departure; otherwise non-refundable.",
+      "special_assistance": "Free and may be added, changed, or removed without a fee."
+    },
+    "name_corrections": {
+      "transferability": "Tickets are non-transferable.",
+      "minor_spelling_correction": "Up to three characters, free.",
+      "legal_name_change": "Free when matching supporting documentation.",
+      "larger_correction": "Manual review required; do not promise approval."
+    }
+  },
+  "ionian_loyalty": {
+    "membership_year": "A rolling 12-month qualification period.",
+    "tiers": {
+      "no_account": {
+        "tier_miles_bonus_percent": 0,
+        "benefits": "Fare rules apply without loyalty benefits."
+      },
+      "bronze": {
+        "qualification": "Free enrolment.",
+        "tier_miles_bonus_percent": 10,
+        "benefits": ["Member-only offers"]
+      },
+      "silver": {
+        "qualification": "25,000 Tier Miles or 20 flown Ionian segments in one membership year.",
+        "tier_miles_bonus_percent": 25,
+        "benefits": ["Member-only offers", "Free standard-seat selection on Economy Classic and Economy Plus", "EUR 10 preferred-seat discount", "Priority boarding after Business and before Group 2", "Priority baggage handling", "Same-day standby or earlier-flight change for EUR 25 when available"]
+      },
+      "gold": {
+        "qualification": "50,000 Tier Miles or 40 flown Ionian segments in one membership year.",
+        "tier_miles_bonus_percent": 50,
+        "benefits": ["Member-only offers", "Free seat selection", "Priority boarding after Business and before Group 2", "Priority baggage handling", "Fast Track security", "Lounge access for member plus one guest travelling on the same flight", "Dedicated Business and Gold airport check-in desk", "Dedicated support line", "One additional 23 kg checked bag beyond ticket allowance", "Free same-day standby or earlier-flight change when available"]
+      }
+    },
+    "gold_economy_plus_at_classic_rate": {
+      "rule": "Gold members booking Economy travel are offered Economy Plus directly at the Economy Classic price, unless they deliberately choose Economy Light.",
+      "customer_display": "Economy Plus",
+      "internal_booking_record": {
+        "fare_tier": "economy_plus",
+        "standard_price_multiplier": 1.55,
+        "applied_price_multiplier": 1.2,
+        "loyalty_benefit": "gold_economy_plus_at_classic_rate"
+      },
+      "effect": "The booking follows Economy Plus fare rules and benefits, then Gold benefits stack on top. Economy Classic is not shown as a selectable Economy fare for Gold members."
+    }
+  }
+}
