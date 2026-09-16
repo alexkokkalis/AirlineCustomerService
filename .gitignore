@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+keys.env
 logs/*.jsonl
 data/guardrail_usage.json
 .sqlite

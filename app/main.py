@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import sqlite3
 import uuid
@@ -12,14 +13,17 @@ from time import perf_counter
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from starlette.responses import JSONResponse
 
+from app.config import IONIAN_TOOL_TOKEN
 from app.guardrails import GuardrailLimits
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = ROOT / "data" / "ionian_airlines.db"
 API_EVENT_LOG_PATH = ROOT / "logs" / "api_events.jsonl"
+AGENT_API_PATH_PREFIXES = ("/policies", "/flights", "/bookings")
 FARE_CABINS = {"economy_light": "economy", "economy_classic": "economy", "economy_plus": "economy", "business": "business"}
 MULTIPLIERS = {"economy_light": 1.0, "economy_classic": 1.2, "economy_plus": 1.55, "business": 3.2}
 PolicyTopic = Literal[
@@ -72,12 +76,19 @@ def write_api_event(event: dict) -> None:
 
 @app.middleware("http")
 async def log_api_request(request: Request, call_next):
-    """Log method, route, status, duration, and correlation ID—never request bodies."""
+    """Authenticate agent tools and log method, route, status, duration, and request ID."""
     started_at = perf_counter()
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     status_code = 500
     error_type = None
     try:
+        is_agent_route = request.url.path.startswith(AGENT_API_PATH_PREFIXES)
+        supplied_token = request.headers.get("X-Ionian-Tool-Token")
+        if is_agent_route and IONIAN_TOOL_TOKEN and not (supplied_token and hmac.compare_digest(supplied_token, IONIAN_TOOL_TOKEN)):
+            status_code = 401
+            response = JSONResponse(status_code=401, content={"detail": "Invalid or missing agent tool token."})
+            response.headers["X-Request-ID"] = request_id
+            return response
         response = await call_next(request)
         status_code = response.status_code
         response.headers["X-Request-ID"] = request_id
@@ -96,6 +107,7 @@ async def log_api_request(request: Request, call_next):
                 "status_code": status_code,
                 "duration_ms": round((perf_counter() - started_at) * 1000, 2),
                 "error_type": error_type,
+                "agent_auth_required": bool(is_agent_route and IONIAN_TOOL_TOKEN),
             }
         )
 
@@ -119,7 +131,7 @@ def database():
 
 class CustomerInput(BaseModel):
     full_name: str = Field(min_length=2)
-    email: str | None = None
+    email: str = Field(min_length=3, description="Primary contact email required for booking retrieval verification.")
     phone: str | None = None
     loyalty_number: str | None = None
 
@@ -137,6 +149,10 @@ class RescheduleInput(BaseModel):
     seat_number: str | None = None
 
 
+class CancellationInput(BaseModel):
+    confirmation: Literal["confirmed"] = Field(description="Explicit cancellation confirmation token.")
+
+
 class AncillaryInput(BaseModel):
     booking_segment_id: int
     ancillary_type: AncillaryType
@@ -144,6 +160,12 @@ class AncillaryInput(BaseModel):
     animal_type: Literal["dog", "cat"] | None = Field(default=None, description="Required only for a pet.")
     combined_weight_kg: float | None = Field(default=None, gt=0, le=32, description="Required for a pet; includes animal and carrier or kennel.")
     weight_kg: float | None = Field(default=None, gt=0, le=32, description="Required for a special item.")
+
+    @field_validator("animal_type", "combined_weight_kg", "weight_kg", mode="before")
+    @classmethod
+    def empty_optional_values_are_none(cls, value: object) -> object:
+        """Accept webhook UIs that send blank optional fields as empty strings."""
+        return None if value == "" else value
 
 
 def row_dict(row: sqlite3.Row | None) -> dict | None:
@@ -259,6 +281,21 @@ def price_for(connection: sqlite3.Connection, flight_id: int, tier: str, loyalty
     return booked_tier, multiplier, round(light["base_price_eur"] * multiplier), benefit
 
 
+def verified_booking_id(connection: sqlite3.Connection, reference: str, contact_email: str) -> int:
+    """Return a booking ID only when both customer-supplied verification factors match."""
+    booking = connection.execute(
+        """SELECT b.id
+        FROM bookings b
+        JOIN customers c ON c.id = b.primary_contact_customer_id
+        WHERE b.reference = ? AND lower(c.email) = lower(?)""",
+        (reference.upper(), contact_email.strip()),
+    ).fetchone()
+    if not booking:
+        # Deliberately do not reveal whether the reference or email was incorrect.
+        raise HTTPException(404, "Booking not found or contact details do not match.")
+    return booking["id"]
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "database": DATABASE_PATH.exists()}
@@ -343,19 +380,69 @@ def book_flight(request: BookingInput) -> dict:
 
 
 @app.get("/bookings/{reference}")
-def retrieve_booking(reference: str) -> dict:
+def retrieve_booking(reference: str, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
+    """Retrieve all service-relevant booking records after verifying both contact factors."""
     with database() as connection:
-        booking = connection.execute("""SELECT b.reference, b.status, b.total_amount_eur, c.full_name, c.loyalty_tier FROM bookings b JOIN customers c ON c.id = b.primary_contact_customer_id WHERE b.reference = ?""", (reference.upper(),)).fetchone()
-        if not booking:
-            raise HTTPException(404, "Booking not found.")
-        segments = connection.execute("""SELECT bs.*, f.flight_number, f.origin_iata, f.destination_iata, f.scheduled_departure_at_utc, s.seat_number FROM booking_segments bs JOIN flights f ON f.id = bs.flight_id LEFT JOIN seats s ON s.id = bs.seat_id WHERE bs.booking_id = (SELECT id FROM bookings WHERE reference = ?)""", (reference.upper(),)).fetchall()
-        return {"booking": dict(booking), "segments": [dict(s) for s in segments]}
+        booking_id = verified_booking_id(connection, reference, contact_email)
+        booking = connection.execute(
+            """SELECT b.reference, b.status, b.total_amount_eur, c.full_name, c.loyalty_tier
+            FROM bookings b
+            JOIN customers c ON c.id = b.primary_contact_customer_id
+            WHERE b.id = ?""",
+            (booking_id,),
+        ).fetchone()
+        segments = connection.execute(
+            """SELECT bs.*, f.flight_number, f.origin_iata, f.destination_iata, f.scheduled_departure_at_utc, s.seat_number
+            FROM booking_segments bs
+            JOIN flights f ON f.id = bs.flight_id
+            LEFT JOIN seats s ON s.id = bs.seat_id
+            WHERE bs.booking_id = ?""",
+            (booking_id,),
+        ).fetchall()
+        ancillaries = connection.execute(
+            """SELECT a.* FROM ancillaries a
+            JOIN booking_segments bs ON bs.id = a.booking_segment_id
+            WHERE bs.booking_id = ?
+            ORDER BY a.id""",
+            (booking_id,),
+        ).fetchall()
+        assistance_requests = connection.execute(
+            """SELECT ar.* FROM assistance_requests ar
+            JOIN booking_segments bs ON bs.id = ar.booking_segment_id
+            WHERE bs.booking_id = ?
+            ORDER BY ar.id""",
+            (booking_id,),
+        ).fetchall()
+        refunds = connection.execute(
+            """SELECT r.* FROM refunds r
+            JOIN booking_segments bs ON bs.id = r.booking_segment_id
+            WHERE bs.booking_id = ?
+            ORDER BY r.id""",
+            (booking_id,),
+        ).fetchall()
+
+        def decode_details(rows: list[sqlite3.Row]) -> list[dict]:
+            records = []
+            for row in rows:
+                record = dict(row)
+                record["details"] = json.loads(record.pop("details_json"))
+                records.append(record)
+            return records
+
+        return {
+            "booking": dict(booking),
+            "segments": [dict(segment) for segment in segments],
+            "ancillaries": decode_details(ancillaries),
+            "assistance_requests": decode_details(assistance_requests),
+            "refunds": [dict(refund) for refund in refunds],
+        }
 
 
 @app.post("/bookings/{reference}/ancillaries", status_code=201)
-def add_ancillary(reference: str, request: AncillaryInput) -> dict:
+def add_ancillary(reference: str, request: AncillaryInput, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
     with database() as connection:
-        segment = connection.execute("""SELECT bs.id, bs.flight_id, f.scheduled_departure_at_utc FROM booking_segments bs JOIN bookings b ON b.id = bs.booking_id JOIN flights f ON f.id = bs.flight_id WHERE b.reference = ? AND bs.id = ? AND bs.status = 'confirmed'""", (reference.upper(), request.booking_segment_id)).fetchone()
+        booking_id = verified_booking_id(connection, reference, contact_email)
+        segment = connection.execute("""SELECT bs.id, bs.flight_id, f.scheduled_departure_at_utc FROM booking_segments bs JOIN flights f ON f.id = bs.flight_id WHERE bs.booking_id = ? AND bs.id = ? AND bs.status = 'confirmed'""", (booking_id, request.booking_segment_id)).fetchone()
         if not segment:
             raise HTTPException(404, "Confirmed booking segment not found.")
         description, amount, details = policy_priced_ancillary(connection, segment, request)
@@ -365,9 +452,10 @@ def add_ancillary(reference: str, request: AncillaryInput) -> dict:
 
 
 @app.post("/bookings/{reference}/cancel")
-def cancel_booking(reference: str) -> dict:
+def cancel_booking(reference: str, request: CancellationInput, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
     with database() as connection:
-        segments = connection.execute("""SELECT bs.* FROM booking_segments bs JOIN bookings b ON b.id = bs.booking_id WHERE b.reference = ? AND bs.status = 'confirmed'""", (reference.upper(),)).fetchall()
+        booking_id = verified_booking_id(connection, reference, contact_email)
+        segments = connection.execute("SELECT bs.* FROM booking_segments bs WHERE bs.booking_id = ? AND bs.status = 'confirmed'", (booking_id,)).fetchall()
         if not segments:
             raise HTTPException(404, "No confirmed segments found for this booking.")
         outcomes = []
@@ -384,10 +472,11 @@ def cancel_booking(reference: str) -> dict:
 
 
 @app.post("/bookings/{reference}/reschedule")
-def reschedule_booking(reference: str, request: RescheduleInput) -> dict:
+def reschedule_booking(reference: str, request: RescheduleInput, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
     with database() as connection:
         connection.execute("BEGIN IMMEDIATE")
-        segment = connection.execute("""SELECT bs.*, f.origin_iata, f.destination_iata FROM booking_segments bs JOIN bookings b ON b.id = bs.booking_id JOIN flights f ON f.id = bs.flight_id WHERE b.reference = ? AND bs.id = ? AND bs.status = 'confirmed'""", (reference.upper(), request.booking_segment_id)).fetchone()
+        booking_id = verified_booking_id(connection, reference, contact_email)
+        segment = connection.execute("""SELECT bs.*, f.origin_iata, f.destination_iata FROM booking_segments bs JOIN flights f ON f.id = bs.flight_id WHERE bs.booking_id = ? AND bs.id = ? AND bs.status = 'confirmed'""", (booking_id, request.booking_segment_id)).fetchone()
         if not segment:
             raise HTTPException(404, "Confirmed booking segment not found.")
         if segment["fare_tier"] == "economy_light":
