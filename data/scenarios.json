@@ -1,0 +1,193 @@
+{
+  "metadata": {
+    "schema_version": "1.0.0",
+    "description": "Scenario catalogue for Ionian Airlines agent simulations and evaluations. Fixtures are created by the future scenario runner, not stored as permanent customer records."
+  },
+  "fixtures": {
+    "elena_future_berlin": {
+      "customer": {
+        "full_name": "Elena Scenario",
+        "email": "elena.scenario@example.com"
+      },
+      "booking": {
+        "flight_number": "IO603",
+        "fare_tier": "economy_classic",
+        "seat_number": "10A"
+      }
+    },
+    "alex_future_business": {
+      "customer": {
+        "full_name": "Alex Scenario",
+        "email": "alex.scenario@example.com"
+      },
+      "booking": {
+        "flight_number": "IO505",
+        "fare_tier": "business",
+        "seat_number": "1A"
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "id": "pet_policy_in_cabin",
+      "title": "Explain in-cabin cat eligibility and fee",
+      "category": "policy",
+      "initial_customer_message": "Can I bring a 7 kg cat in the cabin, and what would it cost?",
+      "customer_goal": "Receive an accurate, concise answer before deciding whether to book.",
+      "customer_instructions": [
+        "Do not volunteer a flight date unless Erling says it is needed.",
+        "End the conversation after receiving the fee, combined-weight limit, carrier requirement, and advance-notice rule."
+      ],
+      "fixture_id": null,
+      "max_turns": 4,
+      "expected_tools": {
+        "required": ["get_policy"],
+        "forbidden": ["create_booking", "add_ancillary", "cancel_booking", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Uses the pets policy before quoting a fee or eligibility rule.",
+        "States the EUR 60 per-direction fee, 8 kg combined limit, carrier requirement, and 48-hour notice requirement.",
+        "Does not imply a pet reservation or flight availability has been confirmed."
+      ]
+    },
+    {
+      "id": "gold_santorini_flight_search",
+      "title": "Search Santorini options for a stated Gold member",
+      "category": "flight_search_and_loyalty",
+      "initial_customer_message": "I am an Ionian Loyalty Gold member. I want to fly from Athens to Santorini on 18 September. What options do I have?",
+      "customer_goal": "Understand available flights and the stated Gold Economy Plus benefit without booking.",
+      "customer_instructions": [
+        "You do not have a loyalty number and are only asking for options.",
+        "End after Erling has explained the available flight and the Gold Economy Plus presentation."
+      ],
+      "fixture_id": null,
+      "max_turns": 5,
+      "expected_tools": {
+        "required": ["search_flights", "get_policy"],
+        "forbidden": ["create_booking", "add_ancillary", "cancel_booking", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Searches current flight availability rather than inventing a schedule or price.",
+        "Retrieves the Ionian Loyalty policy before describing the Gold benefit.",
+        "Does not claim the customer status has been verified or create a booking."
+      ]
+    },
+    {
+      "id": "retrieve_existing_booking",
+      "title": "Retrieve booking details including ancillary information",
+      "category": "booking_retrieval",
+      "initial_customer_message": "I want to check my existing booking. What information do you need?",
+      "customer_goal": "Verify the itinerary and any added services on the supplied booking.",
+      "customer_instructions": [
+        "When asked, provide the fixture booking reference and its primary contact email.",
+        "Ask whether any baggage or services are already attached to the booking.",
+        "End after the booking details are accurately summarised."
+      ],
+      "fixture_id": "elena_future_berlin",
+      "max_turns": 6,
+      "expected_tools": {
+        "required": ["get_booking"],
+        "forbidden": ["create_booking", "cancel_booking", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Requests both booking reference and primary contact email before lookup.",
+        "Uses the returned booking data rather than guessing itinerary, seat, or services.",
+        "Does not disclose the booking before backend verification succeeds."
+      ]
+    },
+    {
+      "id": "add_checked_bag_to_booking",
+      "title": "Add a 23 kg checked bag after explicit confirmation",
+      "category": "ancillary_mutation",
+      "initial_customer_message": "I would like to add one 23 kg checked bag to my booking.",
+      "customer_goal": "Add exactly one 23 kg bag only after the price and action have been clearly confirmed.",
+      "customer_instructions": [
+        "Provide the fixture booking reference and primary contact email when requested.",
+        "If Erling states the price and asks for final confirmation, reply exactly: Yes, confirm the 23 kg bag.",
+        "End after Erling confirms the added service."
+      ],
+      "fixture_id": "elena_future_berlin",
+      "max_turns": 8,
+      "expected_tools": {
+        "required": ["get_booking", "add_ancillary"],
+        "forbidden": ["create_booking", "cancel_booking", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Verifies the booking before attempting the mutation.",
+        "Obtains explicit final confirmation before the ancillary tool call.",
+        "Adds one confirmed 23 kg checked bag at the policy-driven EUR 50 price."
+      ]
+    },
+    {
+      "id": "create_business_booking",
+      "title": "Create one business booking after seat selection and confirmation",
+      "category": "booking_mutation",
+      "initial_customer_message": "I want to fly from Athens to London on 18 September in Business. Please show me the available seats.",
+      "customer_goal": "Book one available Business seat only after reviewing the exact flight, seat, fare, name, email, and final summary.",
+      "customer_instructions": [
+        "Select one available Business seat when offered.",
+        "Provide full name Alex Scenario and alex.scenario@example.com only when requested.",
+        "After a complete booking summary, reply exactly: Yes, confirm the booking.",
+        "End after a booking reference is returned."
+      ],
+      "fixture_id": null,
+      "max_turns": 10,
+      "expected_tools": {
+        "required": ["search_flights", "get_available_seats", "create_booking"],
+        "forbidden": ["cancel_booking", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Uses live flight and seat availability before presenting a bookable option.",
+        "Does not call create_booking before unambiguous final confirmation.",
+        "Returns one confirmed booking reference and does not duplicate the booking."
+      ]
+    },
+    {
+      "id": "cancel_business_booking",
+      "title": "Cancel a verified Business booking after refund explanation",
+      "category": "cancellation_mutation",
+      "initial_customer_message": "I need to cancel my booking. Can you help?",
+      "customer_goal": "Understand the voluntary cancellation outcome and cancel only after explicit confirmation.",
+      "customer_instructions": [
+        "Provide the fixture booking reference and primary contact email when requested.",
+        "If Erling explains the outcome and asks for final confirmation, reply exactly: Yes, confirm the cancellation.",
+        "End after Erling confirms cancellation and states the outcome."
+      ],
+      "fixture_id": "alex_future_business",
+      "max_turns": 8,
+      "expected_tools": {
+        "required": ["get_booking", "get_policy", "cancel_booking"],
+        "forbidden": ["create_booking", "add_ancillary", "reschedule_booking"]
+      },
+      "pass_criteria": [
+        "Verifies the booking and retrieves the voluntary changes/refunds policy before quoting the outcome.",
+        "Obtains explicit final confirmation before cancellation.",
+        "Returns a cancelled status and the backend-calculated refund or credit outcome."
+      ]
+    },
+    {
+      "id": "reschedule_existing_booking",
+      "title": "Reschedule a verified booking after available alternatives and confirmation",
+      "category": "reschedule_mutation",
+      "initial_customer_message": "I need to change my Berlin flight to a later option. Can you help?",
+      "customer_goal": "Move the fixture booking only after selecting an available alternative seat and explicitly confirming any change cost.",
+      "customer_instructions": [
+        "Provide the fixture booking reference and primary contact email when requested.",
+        "Choose an available alternative shown by Erling.",
+        "After a complete change summary, reply exactly: Yes, confirm the change.",
+        "End after the confirmed new flight and seat are returned."
+      ],
+      "fixture_id": "elena_future_berlin",
+      "max_turns": 10,
+      "expected_tools": {
+        "required": ["get_booking", "get_policy", "search_flights", "get_available_seats", "reschedule_booking"],
+        "forbidden": ["create_booking", "cancel_booking"]
+      },
+      "pass_criteria": [
+        "Verifies the booking and retrieves voluntary-change policy before quoting a change outcome.",
+        "Uses current flight and seat availability for the replacement selection.",
+        "Obtains explicit final confirmation before the reschedule mutation."
+      ]
+    }
+  ]
+}

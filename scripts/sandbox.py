@@ -20,7 +20,15 @@ from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
 
+# Running this file directly makes Python treat ``scripts/`` as the import
+# root. Add the project root so sandbox helpers can import application modules.
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.elevenlabs_chat import ElevenLabsChatError, ElevenLabsChatSession
+from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
+
 BASE_URL = "http://127.0.0.1:8000"
 load_dotenv(ROOT / "keys.env")
 
@@ -233,6 +241,48 @@ def cancel_booking(reference: str, contact_email: str = "sandbox@example.com") -
     return result
 
 
+def chat_with_erling(message: str = "Hello Erling. What is the fee for a 7 kg cat in the cabin?") -> str | None:
+    """Run one paid, live Chat Mode turn against the configured ElevenLabs agent.
+
+    The provider conversation ID is printed so the same run can be inspected in
+    the ElevenLabs dashboard. This is intentionally an opt-in developer helper;
+    it does not mock tools or bypass Erling's real webhook configuration.
+    """
+    run_id = create_run(source="sandbox_manual_chat")
+    try:
+        with ElevenLabsChatSession(run_id=run_id) as session:
+            reply = session.send_message(message)
+    except ElevenLabsChatError as error:
+        append_run_event(run_id, "run_failed", error_type=type(error).__name__, message=str(error))
+        print(f"\nElevenLabs Chat Mode error: {error}")
+        return None
+    append_run_event(
+        run_id,
+        "run_completed",
+        conversation_id=reply.conversation_id,
+    )
+
+    print_json(
+        "Erling Chat Mode reply",
+        {
+            "run_id": run_id,
+            "transcript_path": str(run_log_path(run_id)),
+            "conversation_id": reply.conversation_id,
+            "initial_greeting": session.initial_greeting.text if session.initial_greeting else None,
+            "agent_reply": reply.text,
+            "agent_messages_for_turn": list(reply.messages),
+        },
+    )
+    return reply.text
+
+
+def inspect_run_transcript(run_id: str) -> list[dict]:
+    """Print one unified simulation/manual-chat transcript for development."""
+    events = read_run_events(run_id)
+    print_json(f"Run transcript: {run_id}", events)
+    return events
+
+
 def main() -> None:
     # Toggle, reorder, or extend these calls while developing.
     # reset_database()  # WARNING: removes every persisted booking.
@@ -241,7 +291,11 @@ def main() -> None:
     # list_policy_topics()
     # list_flights(destination="LHR")
     # list_bookings()
-    inspect_local_booking("ION-90FF5B")
+    # inspect_local_booking("ION-90FF5B")
+
+    # Live ElevenLabs request: uncomment only when intentionally testing.
+    # chat_with_erling()
+    inspect_run_transcript("run_9a8558cca14a40b380a4f1d62b632b80")
 
     # get_policy("pets")
     # list_available_seats(flight_id=21)

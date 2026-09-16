@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 
 from app.config import IONIAN_TOOL_TOKEN
 from app.guardrails import GuardrailLimits
+from app.run_logging import append_run_event, validate_run_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,10 +80,20 @@ async def log_api_request(request: Request, call_next):
     """Authenticate agent tools and log method, route, status, duration, and request ID."""
     started_at = perf_counter()
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    run_id = validate_run_id(request.headers.get("X-Ionian-Run-ID"))
     status_code = 500
     error_type = None
+    is_agent_route = request.url.path.startswith(AGENT_API_PATH_PREFIXES)
+    if run_id and is_agent_route:
+        append_run_event(
+            run_id,
+            "tool_request_started",
+            role="tool",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+        )
     try:
-        is_agent_route = request.url.path.startswith(AGENT_API_PATH_PREFIXES)
         supplied_token = request.headers.get("X-Ionian-Tool-Token")
         if is_agent_route and IONIAN_TOOL_TOKEN and not (supplied_token and hmac.compare_digest(supplied_token, IONIAN_TOOL_TOKEN)):
             status_code = 401
@@ -97,6 +108,7 @@ async def log_api_request(request: Request, call_next):
         error_type = type(error).__name__
         raise
     finally:
+        duration_ms = round((perf_counter() - started_at) * 1000, 2)
         write_api_event(
             {
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -105,11 +117,23 @@ async def log_api_request(request: Request, call_next):
                 "method": request.method,
                 "path": request.url.path,
                 "status_code": status_code,
-                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "duration_ms": duration_ms,
                 "error_type": error_type,
                 "agent_auth_required": bool(is_agent_route and IONIAN_TOOL_TOKEN),
             }
         )
+        if run_id and is_agent_route:
+            append_run_event(
+                run_id,
+                "tool_request_finished",
+                role="tool",
+                request_id=request_id,
+                method=request.method,
+                path=request.url.path,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                error_type=error_type,
+            )
 
 
 @contextmanager
