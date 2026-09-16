@@ -14,6 +14,7 @@ from typing import Any, Callable, Protocol
 from app.customer_simulator import CustomerSimulator, CustomerSimulatorError
 from app.elevenlabs_chat import ElevenLabsChatError, ElevenLabsChatSession
 from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
+from app.scenario_fixtures import ScenarioFixtureError, ScenarioFixtureProvisioner
 from app.scenarios import get_scenario
 
 
@@ -53,9 +54,11 @@ class ScenarioRunner:
         *,
         simulator: CustomerSimulator | Any | None = None,
         session_factory: Callable[..., ChatSession] = ElevenLabsChatSession,
+        fixture_provisioner: ScenarioFixtureProvisioner | Any | None = None,
     ) -> None:
         self._simulator = simulator or CustomerSimulator()
         self._session_factory = session_factory
+        self._fixture_provisioner = fixture_provisioner or ScenarioFixtureProvisioner()
 
     def run(
         self,
@@ -63,25 +66,15 @@ class ScenarioRunner:
         *,
         private_facts: dict[str, Any] | None = None,
     ) -> SimulationResult:
-        """Run a deterministic opening then alternate one customer turn at a time.
-
-        Fixture creation intentionally remains outside this class. A later test
-        setup layer will create an isolated booking and pass its reference/email
-        as ``private_facts``. This prevents a scenario runner from silently
-        creating or mutating airline records before that fixture contract exists.
-        """
+        """Run a deterministic opening then alternate one customer turn at a time."""
         scenario = get_scenario(scenario_id)
-        if scenario.fixture_id and not private_facts:
-            raise SimulationRunnerError(
-                f"Scenario {scenario_id!r} requires fixture facts for {scenario.fixture_id!r}."
-            )
-
         run_id = create_run(source="scenario_simulation", scenario_id=scenario.id)
         append_run_event(
             run_id,
             "simulation_configured",
             scenario_id=scenario.id,
             max_customer_turns=scenario.max_turns,
+            fixture_id=scenario.fixture_id,
             has_private_facts=bool(private_facts),
         )
         customer_turns = 0
@@ -89,6 +82,11 @@ class ScenarioRunner:
         outcome = "failed"
 
         try:
+            if scenario.fixture_id and not private_facts:
+                fixture = self._fixture_provisioner.provision(scenario, run_id=run_id)
+                if not fixture:
+                    raise ScenarioFixtureError(f"Fixture {scenario.fixture_id!r} was not provisioned.")
+                private_facts = fixture.private_facts()
             with self._session_factory(run_id=run_id) as session:
                 # Fixed test data means the initial customer turn is reproducible
                 # and does not require an additional OpenAI API request.
@@ -123,7 +121,7 @@ class ScenarioRunner:
                         max_customer_turns=scenario.max_turns,
                     )
                 conversation_id = session.conversation_id
-        except (CustomerSimulatorError, ElevenLabsChatError, OSError, ValueError) as error:
+        except (CustomerSimulatorError, ElevenLabsChatError, ScenarioFixtureError, OSError, ValueError) as error:
             append_run_event(
                 run_id,
                 "run_failed",

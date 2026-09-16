@@ -173,6 +173,7 @@
       "customer_goal": "Move the fixture booking only after selecting an available alternative seat and explicitly confirming any change cost.",
       "customer_instructions": [
         "Provide the fixture booking reference and primary contact email when requested.",
+        "When asked for the new date, request 2026-09-20 and an afternoon departure. Do not request a different origin or destination.",
         "Choose an available alternative shown by Erling.",
         "After a complete change summary, reply exactly: Yes, confirm the change.",
         "End after the confirmed new flight and seat are returned."
@@ -180,12 +181,13 @@
       "fixture_id": "elena_future_berlin",
       "max_turns": 10,
       "expected_tools": {
-        "required": ["get_booking", "get_policy", "search_flights", "get_available_seats", "reschedule_booking"],
+        "required": ["get_booking", "get_policy", "search_flights", "get_available_seats", "quote_reschedule", "reschedule_booking"],
         "forbidden": ["create_booking", "cancel_booking"]
       },
       "pass_criteria": [
         "Verifies the booking and retrieves voluntary-change policy before quoting a change outcome.",
         "Uses current flight and seat availability for the replacement selection.",
+        "Uses the non-mutating reschedule quote before presenting the exact change cost.",
         "Obtains explicit final confirmation before the reschedule mutation."
       ]
     }

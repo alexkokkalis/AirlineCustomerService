@@ -359,7 +359,7 @@ def main() -> None:
     """
     Paid OpenAI + ElevenLabs run. The default scenario is policy-only.
     """
-    simulate_scenario()
+    simulate_scenario("reschedule_existing_booking")
 
     # inspect_run_transcript("run_9a8558cca14a40b380a4f1d62b632b80")
 

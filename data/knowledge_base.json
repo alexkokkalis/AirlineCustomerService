@@ -274,6 +274,11 @@
     "route_changes": "Changes are for the same origin and destination. A new route requires cancellation and a new booking.",
     "fare_difference": "A passenger pays any difference when a replacement flight costs more. Ionian does not refund a lower fare when the replacement flight costs less.",
     "change_fee_application": "Per passenger, per changed itinerary; not per flight segment.",
+    "change_fees_eur": {
+      "economy_classic": 45,
+      "economy_plus": 0,
+      "business": 0
+    },
     "travel_credit": {
       "applies_to": "Economy Classic voluntary cancellations.",
       "value": "Paid fare less EUR 60 cancellation fee, plus refundable unused taxes.",

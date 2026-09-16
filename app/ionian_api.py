@@ -7,6 +7,7 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
@@ -173,6 +174,50 @@ class RescheduleInput(BaseModel):
     seat_number: str | None = None
 
 
+@dataclass(frozen=True)
+class RescheduleQuote:
+    """Validated non-mutating reschedule calculation used for quote and commit."""
+
+    booking_reference: str
+    booking_segment_id: int
+    new_flight_id: int
+    new_flight_number: str
+    origin_iata: str
+    destination_iata: str
+    scheduled_departure_at_utc: str
+    scheduled_arrival_at_utc: str
+    seat_id: int
+    seat_number: str
+    fare_tier: str
+    replacement_fare_eur: int
+    change_fee_eur: int
+    fare_difference_eur: int
+    amount_due_eur: int
+    applied_price_multiplier: float
+    loyalty_benefit: str | None
+
+    def public(self) -> dict:
+        """Return the customer-actionable quote without database implementation details."""
+        return {
+            "booking_reference": self.booking_reference,
+            "booking_segment_id": self.booking_segment_id,
+            "new_flight": {
+                "flight_number": self.new_flight_number,
+                "origin_iata": self.origin_iata,
+                "destination_iata": self.destination_iata,
+                "scheduled_departure_at_utc": self.scheduled_departure_at_utc,
+                "scheduled_arrival_at_utc": self.scheduled_arrival_at_utc,
+            },
+            "fare_tier": self.fare_tier,
+            "seat_number": self.seat_number,
+            "replacement_fare_eur": self.replacement_fare_eur,
+            "change_fee_eur": self.change_fee_eur,
+            "fare_difference_eur": self.fare_difference_eur,
+            "amount_due_eur": self.amount_due_eur,
+            "lower_fare_difference_refunded": False,
+        }
+
+
 class CancellationInput(BaseModel):
     confirmation: Literal["confirmed"] = Field(description="Explicit cancellation confirmation token.")
 
@@ -303,6 +348,71 @@ def price_for(connection: sqlite3.Connection, flight_id: int, tier: str, loyalty
     if not light:
         raise HTTPException(409, "No purchasable fare is available for this flight.")
     return booked_tier, multiplier, round(light["base_price_eur"] * multiplier), benefit
+
+
+def voluntary_change_fee(fare_tier: str) -> int:
+    """Read the fare-specific voluntary-change fee from the policy source."""
+    fees = load_knowledge_base()["voluntary_changes_and_refunds"]["change_fees_eur"]
+    return int(fees.get(fare_tier, 0))
+
+
+def calculate_reschedule_quote(
+    connection: sqlite3.Connection,
+    reference: str,
+    request: RescheduleInput,
+    contact_email: str,
+) -> RescheduleQuote:
+    """Validate a replacement and calculate its cost without changing a booking."""
+    booking_id = verified_booking_id(connection, reference, contact_email)
+    segment = connection.execute(
+        """SELECT bs.*, f.origin_iata, f.destination_iata
+        FROM booking_segments bs
+        JOIN flights f ON f.id = bs.flight_id
+        WHERE bs.booking_id = ? AND bs.id = ? AND bs.status = 'confirmed'""",
+        (booking_id, request.booking_segment_id),
+    ).fetchone()
+    if not segment:
+        raise HTTPException(404, "Confirmed booking segment not found.")
+    if segment["fare_tier"] == "economy_light":
+        raise HTTPException(409, "Economy Light flights cannot be changed.")
+    replacement = connection.execute(
+        "SELECT * FROM flights WHERE id = ? AND status = 'scheduled'", (request.new_flight_id,)
+    ).fetchone()
+    if not replacement:
+        raise HTTPException(404, "Replacement scheduled flight not found.")
+    if (replacement["origin_iata"], replacement["destination_iata"]) != (
+        segment["origin_iata"],
+        segment["destination_iata"],
+    ):
+        raise HTTPException(409, "Voluntary changes must keep the same origin and destination.")
+    seat = seat_for(connection, replacement["id"], segment["cabin"], request.seat_number)
+    _, multiplier, replacement_fare, benefit = price_for(
+        connection,
+        replacement["id"],
+        segment["fare_tier"],
+        "gold" if segment["loyalty_benefit"] else "none",
+    )
+    fare_difference = replacement_fare - segment["fare_amount_eur"]
+    change_fee = voluntary_change_fee(segment["fare_tier"])
+    return RescheduleQuote(
+        booking_reference=reference.upper(),
+        booking_segment_id=segment["id"],
+        new_flight_id=replacement["id"],
+        new_flight_number=replacement["flight_number"],
+        origin_iata=replacement["origin_iata"],
+        destination_iata=replacement["destination_iata"],
+        scheduled_departure_at_utc=replacement["scheduled_departure_at_utc"],
+        scheduled_arrival_at_utc=replacement["scheduled_arrival_at_utc"],
+        seat_id=seat["id"],
+        seat_number=seat["seat_number"],
+        fare_tier=segment["fare_tier"],
+        replacement_fare_eur=replacement_fare,
+        change_fee_eur=change_fee,
+        fare_difference_eur=fare_difference,
+        amount_due_eur=change_fee + max(0, fare_difference),
+        applied_price_multiplier=multiplier,
+        loyalty_benefit=benefit,
+    )
 
 
 def verified_booking_id(connection: sqlite3.Connection, reference: str, contact_email: str) -> int:
@@ -499,21 +609,38 @@ def cancel_booking(reference: str, request: CancellationInput, contact_email: st
 def reschedule_booking(reference: str, request: RescheduleInput, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
     with database() as connection:
         connection.execute("BEGIN IMMEDIATE")
-        booking_id = verified_booking_id(connection, reference, contact_email)
-        segment = connection.execute("""SELECT bs.*, f.origin_iata, f.destination_iata FROM booking_segments bs JOIN flights f ON f.id = bs.flight_id WHERE bs.booking_id = ? AND bs.id = ? AND bs.status = 'confirmed'""", (booking_id, request.booking_segment_id)).fetchone()
-        if not segment:
-            raise HTTPException(404, "Confirmed booking segment not found.")
-        if segment["fare_tier"] == "economy_light":
-            raise HTTPException(409, "Economy Light flights cannot be changed.")
-        replacement = connection.execute("SELECT * FROM flights WHERE id = ? AND status = 'scheduled'", (request.new_flight_id,)).fetchone()
-        if not replacement:
-            raise HTTPException(404, "Replacement scheduled flight not found.")
-        if (replacement["origin_iata"], replacement["destination_iata"]) != (segment["origin_iata"], segment["destination_iata"]):
-            raise HTTPException(409, "Voluntary changes must keep the same origin and destination.")
-        seat = seat_for(connection, replacement["id"], segment["cabin"], request.seat_number)
-        _, multiplier, replacement_fare, benefit = price_for(connection, replacement["id"], segment["fare_tier"], "gold" if segment["loyalty_benefit"] else "none")
-        change_fee = 45 if segment["fare_tier"] == "economy_classic" else 0
-        total_difference = replacement_fare - segment["fare_amount_eur"] + change_fee
-        connection.execute("""UPDATE booking_segments SET flight_id = ?, seat_id = ?, fare_amount_eur = ?, applied_price_multiplier = ?, loyalty_benefit = ?, status = 'confirmed' WHERE id = ?""", (replacement["id"], seat["id"], replacement_fare, multiplier, benefit, segment["id"]))
-        connection.execute("UPDATE bookings SET total_amount_eur = MAX(0, total_amount_eur + ?), updated_at_utc = CURRENT_TIMESTAMP WHERE reference = ?", (total_difference, reference.upper()))
-        return {"booking_reference": reference.upper(), "booking_segment_id": segment["id"], "new_flight_id": replacement["id"], "seat_number": seat["seat_number"], "change_fee_eur": change_fee, "fare_difference_eur": replacement_fare - segment["fare_amount_eur"], "amount_due_eur": max(0, total_difference)}
+        quote = calculate_reschedule_quote(connection, reference, request, contact_email)
+        connection.execute(
+            """UPDATE booking_segments
+            SET flight_id = ?, seat_id = ?, fare_amount_eur = ?, applied_price_multiplier = ?,
+                loyalty_benefit = ?, status = 'confirmed'
+            WHERE id = ?""",
+            (
+                quote.new_flight_id,
+                quote.seat_id,
+                quote.replacement_fare_eur,
+                quote.applied_price_multiplier,
+                quote.loyalty_benefit,
+                quote.booking_segment_id,
+            ),
+        )
+        connection.execute(
+            "UPDATE bookings SET total_amount_eur = total_amount_eur + ?, updated_at_utc = CURRENT_TIMESTAMP WHERE reference = ?",
+            (quote.amount_due_eur, quote.booking_reference),
+        )
+        return {
+            "booking_reference": quote.booking_reference,
+            "booking_segment_id": quote.booking_segment_id,
+            "new_flight_id": quote.new_flight_id,
+            "seat_number": quote.seat_number,
+            "change_fee_eur": quote.change_fee_eur,
+            "fare_difference_eur": quote.fare_difference_eur,
+            "amount_due_eur": quote.amount_due_eur,
+        }
+
+
+@app.post("/bookings/{reference}/reschedule/quote")
+def quote_reschedule(reference: str, request: RescheduleInput, contact_email: str = Query(min_length=3, description="Email address of the booking's primary contact.")) -> dict:
+    """Return a validated, current reschedule quote without changing the booking."""
+    with database() as connection:
+        return calculate_reschedule_quote(connection, reference, request, contact_email).public()
