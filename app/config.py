@@ -18,3 +18,8 @@ IONIAN_TOOL_TOKEN = os.getenv("IONIAN_TOOL_TOKEN")
 # intentionally loaded from the gitignored keys.env file, never source code.
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_AGENT_ID = os.getenv("ELEVENLABS_AGENT_ID")
+
+# OpenAI is used only by the assessment customer simulator.  This is separate
+# from Erling, which continues to run in ElevenLabs Chat Mode.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_SIMULATOR_MODEL = os.getenv("OPENAI_SIMULATOR_MODEL", "gpt-5-mini")

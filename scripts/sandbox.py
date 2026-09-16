@@ -1,7 +1,7 @@
 """Developer workbench for the local Ionian Airlines API.
 
 Start the API in another terminal:
-    .venv/bin/uvicorn app.main:app --reload
+    .venv/bin/uvicorn app.ionian_api:app --reload
 
 Enable individual calls in main() to explore, reset, or exercise the system.
 """
@@ -27,7 +27,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.elevenlabs_chat import ElevenLabsChatError, ElevenLabsChatSession
+from app.customer_simulator import CustomerSimulator, CustomerSimulatorError
 from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
+from app.scenarios import get_scenario
+from app.simulation_runner import ScenarioRunner, SimulationRunnerError
 
 BASE_URL = "http://127.0.0.1:8000"
 load_dotenv(ROOT / "keys.env")
@@ -54,7 +57,7 @@ def api_request(method: str, path: str, *, params: dict[str, object] | None = No
     except HTTPError as error:
         print(f"\nAPI error {error.code} for {method} {path}: {error.read().decode()}")
     except URLError:
-        print("\nCannot reach the API. Start it with: .venv/bin/uvicorn app.main:app --reload")
+        print("\nCannot reach the API. Start it with: .venv/bin/uvicorn app.ionian_api:app --reload")
     return None
 
 
@@ -283,38 +286,83 @@ def inspect_run_transcript(run_id: str) -> list[dict]:
     return events
 
 
+def preview_customer_simulator(scenario_id: str = "pet_policy_in_cabin") -> None:
+    """Make one paid OpenAI call to check the customer simulator in isolation.
+
+    This does not contact ElevenLabs or modify the airline database. It is kept
+    commented out in main() so a paid call is always a deliberate choice.
+    """
+    scenario = get_scenario(scenario_id)
+    run_id = create_run(source="sandbox_customer_simulator_preview", scenario_id=scenario.id)
+    try:
+        simulator = CustomerSimulator()
+        turn = simulator.next_turn(scenario, [], run_id=run_id)
+    except CustomerSimulatorError as error:
+        append_run_event(run_id, "run_failed", error_type=type(error).__name__)
+        print(f"\nCustomer simulator error: {error}")
+        return
+    append_run_event(run_id, "run_completed")
+    print_json(
+        "Customer simulator preview",
+        {
+            "run_id": run_id,
+            "transcript_path": str(run_log_path(run_id)),
+            "scenario_id": scenario.id,
+            "action": turn.action,
+            "message": turn.message,
+            "model": simulator.model,
+            "input_tokens": turn.input_tokens,
+            "output_tokens": turn.output_tokens,
+        },
+    )
+
+
+def simulate_scenario(scenario_id: str = "pet_policy_in_cabin") -> None:
+    """Run one paid, end-to-end customer simulation against Erling.
+
+    The default policy-only scenario is safe for a first live test: it does not
+    create or change booking data. Fixture-backed action scenarios are blocked
+    until their isolated-fixture setup is added.
+    """
+    try:
+        result = ScenarioRunner().run(scenario_id)
+    except SimulationRunnerError as error:
+        print(f"\nScenario simulation error: {error}")
+        return
+    print_json(
+        "Scenario simulation result",
+        {
+            "run_id": result.run_id,
+            "scenario_id": result.scenario_id,
+            "outcome": result.outcome,
+            "customer_turns": result.customer_turns,
+            "conversation_id": result.conversation_id,
+            "transcript_path": result.transcript_path,
+        },
+    )
+
+
 def main() -> None:
     # Toggle, reorder, or extend these calls while developing.
     # reset_database()  # WARNING: removes every persisted booking.
 
-    # get_guardrails()
-    # list_policy_topics()
-    # list_flights(destination="LHR")
-    # list_bookings()
-    # inspect_local_booking("ION-90FF5B")
-
-    # Live ElevenLabs request: uncomment only when intentionally testing.
+    """
+    Live ElevenLabs request: uncomment only when intentionally testing.
+    """ 
     # chat_with_erling()
-    inspect_run_transcript("run_9a8558cca14a40b380a4f1d62b632b80")
 
-    # get_policy("pets")
-    # list_available_seats(flight_id=21)
+    """
+    Paid OpenAI request only; this does not contact Erling.
+    """
+    # preview_customer_simulator()
 
-    # booking = create_demo_booking()
-    # if booking:
-    #     reference = booking["booking_reference"]
-    #     segment_id = booking["booking_segment_id"]
-    #     get_booking(reference, contact_email="elena.sandbox@example.com")
-    #     add_checked_bag(reference, segment_id, option="23kg")
-    #     add_special_item(reference, segment_id, option="bicycle", weight_kg=18)
-    #     add_pet(reference, segment_id, travel_mode="in_hold", animal_type="dog", combined_weight_kg=9)
-    #     get_booking(reference, contact_email="elena.sandbox@example.com")
+    """
+    Paid OpenAI + ElevenLabs run. The default scenario is policy-only.
+    """
+    simulate_scenario()
 
-        # cancel_booking(reference)
-    # booking = create_demo_booking()
+    # inspect_run_transcript("run_9a8558cca14a40b380a4f1d62b632b80")
 
-    # reference = "ION-E7503D"
-    # get_booking(reference, contact_email="elena.sandbox@example.com")
 
 
 if __name__ == "__main__":
