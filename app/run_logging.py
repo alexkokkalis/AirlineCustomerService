@@ -66,6 +66,16 @@ def append_run_event(run_id: str | None, event_type: str, **fields: Any) -> None
             log_file.write(json.dumps(event, separators=(",", ":")) + "\n")
     except OSError:
         pass
+    else:
+        # Keep JSONL as the source of truth, then best-effort fan out the same
+        # event to local dashboard clients. A dashboard issue must never block
+        # a conversation, webhook, or evaluation.
+        try:
+            from app.dashboard_events import publish_run_event
+
+            publish_run_event(event)
+        except Exception:
+            pass
 
 
 def read_run_events(run_id: str) -> list[dict[str, Any]]:

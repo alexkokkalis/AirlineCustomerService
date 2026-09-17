@@ -120,14 +120,14 @@
     },
     {
       "id": "create_business_booking",
-      "title": "Create one business booking after seat selection and confirmation",
+      "title": "Create one business booking after seat selection and clear authorization",
       "category": "booking_mutation",
       "initial_customer_message": "I want to fly from Athens to London on 18 September in Business. Please show me the available seats.",
-      "customer_goal": "Book one available Business seat only after reviewing the exact flight, seat, fare, name, email, and final summary.",
+      "customer_goal": "Book one available Business seat after reviewing the exact flight, seat, fare, name, and email.",
       "customer_instructions": [
         "Select one available Business seat when offered.",
         "Provide full name Alex Scenario and alex.scenario@example.com only when requested.",
-        "After a complete booking summary, reply exactly: Yes, confirm the booking.",
+        "After Erling has shown the selected flight, seat, and EUR price, give one clear instruction to create the booking, for example: Please proceed with booking IO507, seat 2A.",
         "End after a booking reference is returned."
       ],
       "fixture_id": null,
@@ -138,7 +138,7 @@
       },
       "pass_criteria": [
         "Uses live flight and seat availability before presenting a bookable option.",
-        "Does not call create_booking before unambiguous final confirmation.",
+        "Does not call create_booking before the customer has made a clear booking instruction after the selected flight, seat, and price were shown.",
         "Returns one confirmed booking reference and does not duplicate the booking."
       ]
     },

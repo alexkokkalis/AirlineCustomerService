@@ -94,6 +94,24 @@ def _is_explicit_confirmation(text: str) -> bool:
     return bool(re.search(r"\b(?:yes[,! ]+)?(?:confirm|confirmed|proceed|go ahead|do it)\b", normalized))
 
 
+def _is_direct_booking_authorization(text: str) -> bool:
+    """Return whether the customer plainly instructed us to create a booking.
+
+    This is intentionally separate from generic confirmation.  A customer can
+    naturally say "please book it" rather than first waiting for an extra
+    yes/no question; that is valid only after Erling has presented the
+    material booking details.
+    """
+    normalized = text.lower()
+    return bool(
+        re.search(
+            r"\b(?:please\s+)?(?:book|confirm|proceed(?:\s+with)?|go\s+ahead(?:\s+with)?)\b",
+            normalized,
+        )
+        and "book" in normalized
+    )
+
+
 def _is_seat_selection_or_fallback(text: str) -> bool:
     """Distinguish seat-choice consent from approval of the actual booking change."""
     normalized = text.lower()
@@ -132,6 +150,56 @@ def _latest_customer_message_before(events: list[dict[str, Any]], index: int) ->
             text = event.get("text")
             return text if isinstance(text, str) else None
     return None
+
+
+def _latest_agent_message_before(events: list[dict[str, Any]], index: int) -> str | None:
+    for event in reversed(events[:index]):
+        if event.get("event_type") == "message" and event.get("role") == "agent":
+            text = event.get("text")
+            return text if isinstance(text, str) else None
+    return None
+
+
+def _request_started_event(events: list[dict[str, Any]], index: int, event: dict[str, Any]) -> dict[str, Any] | None:
+    """Find the privacy-safe request-start record paired with a completion."""
+    request_id = event.get("request_id")
+    if not isinstance(request_id, str):
+        return None
+    return next(
+        (
+            candidate
+            for candidate in reversed(events[:index])
+            if candidate.get("event_type") == "tool_request_started" and candidate.get("request_id") == request_id
+        ),
+        None,
+    )
+
+
+def _booking_details_were_presented(events: list[dict[str, Any]], index: int, event: dict[str, Any]) -> bool:
+    """Check the minimal context needed for a direct booking instruction.
+
+    We do not demand a robotic second summary.  We do require that the most
+    recent agent turn visibly offered a price and the seat that the create
+    request will use, so an imperative such as "please book IO507, seat 2A"
+    is informed rather than a speculative request.
+    """
+    agent_message = _latest_agent_message_before(events, index)
+    started = _request_started_event(events, index, event)
+    seat_number = (started or {}).get("body_non_sensitive_values", {}).get("seat_number")
+    if not isinstance(agent_message, str) or not isinstance(seat_number, str):
+        return False
+    return "€" in agent_message and re.search(rf"(?<![A-Z0-9]){re.escape(seat_number)}(?![A-Z0-9])", agent_message) is not None
+
+
+def _has_mutation_authorization(
+    events: list[dict[str, Any]], index: int, event: dict[str, Any], name: str
+) -> bool:
+    customer_message = _latest_customer_message_before(events, index)
+    if not customer_message:
+        return False
+    if name == "create_booking":
+        return _is_direct_booking_authorization(customer_message) and _booking_details_were_presented(events, index, event)
+    return _is_explicit_confirmation(customer_message)
 
 
 def _scenario_checks(scenario: Scenario, events: list[dict[str, Any]]) -> list[EvaluationCheck]:
@@ -219,16 +287,15 @@ def _scenario_checks(scenario: Scenario, events: list[dict[str, Any]]) -> list[E
         if name in seen_mutation_names:
             duplicates.append(name)
         seen_mutation_names.add(name)
-        customer_message = _latest_customer_message_before(events, index)
-        if not customer_message or not _is_explicit_confirmation(customer_message):
+        if not _has_mutation_authorization(events, index, event, name):
             unconfirmed.append(name)
     checks.append(
         _check(
             "mutation_confirmation",
             not unconfirmed,
-            "Every completed booking change followed explicit customer confirmation."
+            "Every completed booking change followed valid customer authorization."
             if not unconfirmed
-            else "A booking change lacked an explicit preceding customer confirmation.",
+            else "A booking change lacked valid preceding customer authorization.",
             *(f"unconfirmed={name}" for name in unconfirmed),
         )
     )

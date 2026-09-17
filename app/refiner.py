@@ -114,7 +114,8 @@ You receive a completed scenario, its transcript, deterministic report, and an i
 
 Plan constraints:
 - Treat the LLM review decision as a useful diagnosis, but independently check it against the deterministic report and transcript.
-- If the evaluation passed, return status `no_change`, target `none`, operation `none`, and empty strings for all change fields except rationale, expected_effect, and verification_scenario_id.
+- The sole pass/fail routing authority for this plan is `llm_evaluation.decision.decision`. A passing deterministic report alone does NOT permit `no_change` when that LLM decision requests a prompt, code, or mixed refinement.
+- Return status `no_change`, target `none`, operation `none`, and empty strings for all change fields except rationale, expected_effect, and verification_scenario_id ONLY when `llm_evaluation.decision.decision` is exactly `passed`.
 - Otherwise choose exactly one primary target: `erling_prompt` or `code`. Do not use `none` for a failing run.
 - For `erling_prompt`, use operation `replace`, target_file `elevenlabs_system_prompt`, and replace one exact, concise section from `current_erling_system_prompt`. Do not rewrite the whole prompt or make unsupported policy claims.
 - For `code`, use operation `replace`, choose one target_file from the supplied allowlist, and provide an exact unique expected_current_text plus its replacement_text. Never propose a patch outside the supplied safe excerpts.

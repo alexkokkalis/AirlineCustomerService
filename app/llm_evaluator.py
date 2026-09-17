@@ -160,6 +160,8 @@ Attribution boundaries for this simulated workflow:
 - The customer simulator chooses the terminal `end` action and the runner closes the session. Erling is not responsible for ending a simulation merely because it has completed the customer's goal.
 - If Erling has correctly fulfilled the goal and the simulated customer repeats a fulfilled request, does not choose `end`, or causes a max-turn loop, record one natural_end_to_end code_issue for the simulator/orchestration. Do not add an Erling prompt_issue that is only a symptom of that loop.
 - A clear booking summary following a successful get_booking audit is adequate outcome confirmation. Do not create a prompt failure solely because Erling did not literally say that it "retrieved" the booking. Lower that score only for a material omission, contradiction, unsupported claim, or unclear result.
+- For creating a booking, do not require a redundant second yes/no confirmation when Erling has already displayed the selected flight, seat, and exact price and the customer then gives a clear booking instruction such as "please book it" or "proceed with booking IO507, seat 2A." That is valid authorization. Penalize only an ambiguous request or a create_booking call made before the material selection and price were shown.
+- Keep the stricter confirmation rule for cancellations and reschedules: Erling must disclose the applicable cancellation outcome or non-mutating reschedule quote before asking for, and receiving, the final approval to mutate the booking.
 - Do not manufacture secondary failures from stylistic preferences. A failure must identify a concrete, material effect on correctness, safety, or completion.
 
 Tool ownership:

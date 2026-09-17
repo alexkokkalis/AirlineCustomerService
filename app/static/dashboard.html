@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ionian Airlines · Agent Monitor</title>
+    <link rel="stylesheet" href="/dashboard-assets/dashboard.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">IONIAN AIRLINES · AGENT OPERATIONS</p>
+          <h1>Erling refinement monitor</h1>
+        </div>
+        <div class="controls" aria-label="Simulation controls">
+          <label>
+            <span>Scenario</span>
+            <select id="scenario-select" disabled></select>
+          </label>
+          <label class="apply-control" title="Off by default. When enabled, a validated refinement may update only the dedicated ElevenLabs branch or allowlisted code on the autonomous-refinement Git branch.">
+            <input id="apply-changes" type="checkbox">
+            <span>Apply verified refinements</span>
+          </label>
+          <button id="run-button" type="button" disabled>Run dry simulation</button>
+        </div>
+        <div class="run-status">
+          <span id="connection-status" class="status-pill neutral">Loading</span>
+          <strong id="phase">Idle</strong>
+          <span id="job-id">No active job</span>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Run metrics">
+        <div><span>Scenario</span><strong id="metric-scenario">—</strong></div>
+        <div><span>Iteration</span><strong id="metric-iteration">0</strong></div>
+        <div><span>Tool calls</span><strong id="metric-tools">0</strong></div>
+        <div><span>Customer turns</span><strong id="metric-turns">0</strong></div>
+      </section>
+
+      <section class="grid">
+        <article class="panel conversation-panel">
+          <div class="panel-header">
+            <div><p class="eyebrow">LIVE TRANSCRIPT</p><h2>Conversation</h2></div>
+            <span id="conversation-run" class="muted">Waiting for a run</span>
+          </div>
+          <div id="conversation" class="conversation empty-state">Choose a scenario and start a dry simulation.</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header"><div><p class="eyebrow">QUALITY GATE</p><h2>Evaluation</h2></div><span id="evaluation-status" class="muted">Waiting</span></div>
+          <div id="evaluation" class="stack empty-state">Deterministic and LLM review results will appear here.</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header"><div><p class="eyebrow">AUTONOMOUS LOOP</p><h2>Refinement</h2></div><span id="refinement-status" class="muted">Waiting</span></div>
+          <div id="refinement" class="stack empty-state">Plans, application decisions, and verification runs will appear here.</div>
+        </article>
+
+        <article class="panel diff-panel">
+          <div class="panel-header"><div><p class="eyebrow">AUDITABLE CHANGE</p><h2>Diff</h2></div><span id="diff-status" class="muted">No change</span></div>
+          <pre id="diff" class="diff empty-state">No refinement diff is available yet.</pre>
+        </article>
+      </section>
+    </main>
+    <template id="tool-template"><span class="tool-chip"></span></template>
+    <script src="/dashboard-assets/dashboard.js"></script>
+  </body>
+</html>

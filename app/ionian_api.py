@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 
 from app.config import IONIAN_TOOL_TOKEN
+from app.dashboard_api import mount_dashboard
 from app.guardrails import GuardrailLimits
 from app.run_logging import append_run_event, validate_run_id
 
@@ -75,6 +76,7 @@ AncillaryOption = Literal[
 ]
 
 app = FastAPI(title="Ionian Airlines Agent API", version="0.1.0")
+mount_dashboard(app)
 
 
 def write_api_event(event: dict) -> None:
