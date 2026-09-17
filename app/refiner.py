@@ -324,8 +324,18 @@ class RefinementPlanner:
                 prompt_snapshot=prompt_snapshot,
             )
         except Exception as error:
-            append_run_event(run_id, "refinement_planning_failed", scenario_id=scenario_id, error_type=type(error).__name__)
-            raise RefinementPlannerError("Refiner could not produce a safe, valid plan.") from error
+            # The provider response itself is never written to the run log.  The
+            # validation error is safe, actionable context for the operator and
+            # tells us why an otherwise bounded refinement stopped.
+            reason = str(error) or type(error).__name__
+            append_run_event(
+                run_id,
+                "refinement_planning_failed",
+                scenario_id=scenario_id,
+                error_type=type(error).__name__,
+                reason=reason,
+            )
+            raise RefinementPlannerError(f"Refiner could not produce a safe, valid plan: {reason}") from error
 
         usage = getattr(response, "usage", None)
         path = refinement_plan_path(run_id)

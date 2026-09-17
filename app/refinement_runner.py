@@ -107,6 +107,17 @@ class RefinementRunner:
         applied_changes = 0
         try:
             for iteration_number in range(1, self.limits.max_iterations + 1):
+                # ``max_iterations`` may be higher than the scenario budget.
+                # Reaching that budget is an expected bounded outcome, not an
+                # exceptional attempt to start one more live conversation.
+                if self.guardrails.scenarios >= self.limits.max_scenarios_per_run:
+                    return RefinementRunResult(
+                        "scenario_limit_reached",
+                        tuple(iterations),
+                        self.limits.as_dict(),
+                        applied_changes,
+                        not apply_changes,
+                    )
                 self.guardrails.start_scenario()
                 simulation = self._scenario_runner.run(
                     current_scenario_id,
@@ -170,4 +181,4 @@ class RefinementRunner:
                 not apply_changes,
             )
         except (GuardrailExceeded, SimulationRunnerError, RefinementPlannerError, RefinementApplyError) as error:
-            raise RefinementRunnerError("Autonomous refinement stopped safely.") from error
+            raise RefinementRunnerError(f"Autonomous refinement stopped safely: {error}") from error
