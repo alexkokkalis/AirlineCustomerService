@@ -75,12 +75,17 @@ if [[ -n "${NGROK_DOMAIN}" ]]; then
 fi
 "${NGROK_BIN}" "${ngrok_args[@]}" &
 ngrok_pid=$!
+sleep 0.5
+if ! kill -0 "${ngrok_pid}" 2>/dev/null; then
+  echo "ngrok exited immediately. Check the ngrok output above (for example, a domain already in use)." >&2
+  exit 1
+fi
 
 echo ""
 echo "Ionian Airlines local environment is running:"
 echo "  Dashboard: http://${HOST}:${PORT}/dashboard"
 echo "  API docs:  http://${HOST}:${PORT}/docs"
-echo "  ngrok UI:  http://127.0.0.1:4040"
+echo "  ngrok traffic inspector: https://dashboard.ngrok.com/traffic-inspector"
 echo ""
 echo "Open the dashboard, select a scenario, and press Run."
 if [[ -n "${NGROK_DOMAIN}" ]]; then

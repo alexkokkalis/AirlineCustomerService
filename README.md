@@ -4,23 +4,75 @@ An assessment project for a policy-aware airline customer-service agent. The sys
 
 It supports policy questions, flight and seat search, verified booking retrieval, booking creation, ancillary purchases, cancellation, and rescheduling. Every agent-facing action is recorded in a structured, run-scoped log so that simulated conversations can be evaluated and refined with evidence.
 
-## Quick start
+## First run: from clone to dashboard
 
-After the one-off setup below, use one command to start the API, dashboard, and ngrok tunnel:
+Follow these steps in order from a terminal. They are intended to be enough for a new developer to run the complete local system.
+
+### 1. Clone the repository and enter it
+
+```bash
+git clone https://github.com/alexkokkalis/AirlineCustomerService.git
+cd AirlineCustomerService
+```
+
+### 2. Create and activate the Python environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+The `source` command must be repeated in each new terminal before running Python commands directly. A successful activation usually adds `(.venv)` to the shell prompt.
+
+### 3. Add the separately provided local credentials
+
+Place the separately provided `keys.env` file in the repository root. It is ignored by Git and must never be committed.
+
+```dotenv
+IONIAN_TOOL_TOKEN=replace-with-a-long-random-shared-token
+ELEVENLABS_API_KEY=...
+ELEVENLABS_AGENT_ID=...
+OPENAI_API_KEY=...
+```
+
+### 4. Choose the appropriate Git branch
+
+For a safe dashboard run or plan-only refinement, any branch is fine. For an apply-capable refinement, the code applier will only operate on the dedicated branch:
+
+```bash
+git switch autonomous-refinement
+```
+
+Do this only with a clean working tree. Prompt changes always target the configured dedicated ElevenLabs refinement branch; the live/main ElevenLabs agent is never targeted by the Applier.
+
+### 5. Start everything
 
 ```bash
 bash scripts/run_local.sh
 ```
 
-Then open:
+The launcher creates the sandbox database if it is missing, starts FastAPI, waits for its health check, and starts ngrok using the configured stable hostname. Keep this terminal open.
+
+### 6. Open the dashboard
+
+Open this URL in a browser:
 
 ```text
 http://127.0.0.1:8000/dashboard
 ```
 
-Select a scenario and press **Run**. Press `Ctrl-C` in the launcher terminal to stop both Uvicorn and ngrok.
+### 7. Use the dashboard controls
 
-> **One-time ngrok setup:** in the ngrok dashboard, open **Domains** and reserve a static domain. Set its hostname (without `https://`) as `NGROK_DOMAIN` in `app/config.py`. The launcher will then request that same domain with ngrok’s `--url` option on every start, so your ElevenLabs webhook URLs never need changing. ngrok documents static domains as the persistent public hostname for an endpoint. [ngrok static-domain guide](https://ngrok.com/docs/integrations/kubernetes-ingress/apiops)
+| Control | Meaning |
+| --- | --- |
+| **Scenario dropdown** | Chooses the customer goal, fixtures, expected tools, and deterministic checks to run. |
+| **Run dry simulation** | Runs the scenario, deterministic evaluation, LLM review, and Refiner planning. It does **not** apply a prompt or source-code refinement. The simulated scenario may still create, change, or cancel sandbox booking data as part of its test. |
+| **Apply validated refinement** checkbox | Enables an apply-capable loop after a browser confirmation. A validated prompt plan can update only the dedicated ElevenLabs refinement branch; a validated code plan can update only allowlisted files on `autonomous-refinement`. |
+| **Run refinement loop** | Appears when the checkbox is enabled and starts the bounded simulate → evaluate → plan → apply → verify loop. |
+
+The four panels show the conversation, evaluation, refinement plan, and exact diff. The launcher also prints the public webhook endpoint and the hosted [ngrok Traffic Inspector](https://dashboard.ngrok.com/traffic-inspector). Press `Ctrl-C` in the launcher terminal to stop Uvicorn and ngrok.
 
 ## Architecture
 
@@ -65,28 +117,9 @@ The local monitoring dashboard is served by the same FastAPI application. It use
 - An OpenAI API key for the customer simulator, evaluator, and refiner
 - [ngrok](https://ngrok.com/) or another HTTPS tunnel when ElevenLabs needs to call the local API
 
-## One-off local setup
+## Configuration and reset reference
 
-From the repository root:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python scripts/init_database.py
-```
-
-Create a gitignored `keys.env` file. Never commit it.
-
-```dotenv
-IONIAN_TOOL_TOKEN=replace-with-a-long-random-shared-token
-ELEVENLABS_API_KEY=...
-ELEVENLABS_AGENT_ID=...
-OPENAI_API_KEY=...
-```
-
-The OpenAI model choices and refinement guardrail limits are version-controlled application settings in `app/config.py` and `app/guardrails.py`; they are deliberately not secrets. Configure each ElevenLabs webhook with the public ngrok HTTPS URL and include the `X-Ionian-Tool-Token` secret header. The simulator also supplies an `X-Ionian-Run-ID` dynamic header, which links tool calls to the correct transcript.
+The OpenAI model choices and refinement guardrail limits are version-controlled application settings in `app/config.py` and `app/guardrails.py`; they are deliberately not secrets. The simulator supplies an `X-Ionian-Run-ID` dynamic header, which links tool calls to the correct transcript.
 
 > **Reset warning:** `python scripts/init_database.py` recreates the SQLite database and removes sandbox bookings. It is useful for reproducible test data, not for production data.
 

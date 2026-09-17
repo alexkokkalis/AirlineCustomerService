@@ -72,7 +72,14 @@ function renderRefinement(detail) {
 async function refreshRun(runId, replay = false) {
   const response = await fetch(`/dashboard-api/runs/${encodeURIComponent(runId)}`); if (!response.ok) return;
   const detail = await response.json();
-  if (replay) detail.events.forEach(handleRunEvent);
+  if (replay) {
+    // A historic run is loaded independently, so recover its pipeline
+    // iteration from the durable terminal event rather than always labelling
+    // the first displayed run as iteration 1.
+    const persistedIteration = detail.events.find((event) => event.event_type === "refinement_iteration_completed")?.iteration;
+    if (Number.isInteger(persistedIteration) && persistedIteration > 0) state.iteration = persistedIteration - 1;
+    detail.events.forEach(handleRunEvent);
+  }
   renderEvaluation(detail); renderRefinement(detail);
 }
 
