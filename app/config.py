@@ -19,10 +19,14 @@ IONIAN_TOOL_TOKEN = os.getenv("IONIAN_TOOL_TOKEN")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_AGENT_ID = os.getenv("ELEVENLABS_AGENT_ID")
 
-# OpenAI is used only by the assessment customer simulator.  This is separate
-# from Erling, which continues to run in ElevenLabs Chat Mode.
+# This deliberately defaults to None: a refinement job must name an explicit
+# non-main ElevenLabs branch before it can read prompt context or later apply a
+# prompt update. Set the branch ID here after creating that branch in ElevenLabs.
+ELEVENLABS_REFINEMENT_BRANCH_ID = "agtbrch_5201m2r4qcsdf7svbhtd0b2k16qc"
+
+# OpenAI model roles are application choices, not environment secrets. Erling
+# continues to run in ElevenLabs Chat Mode.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_SIMULATOR_MODEL = os.getenv("OPENAI_SIMULATOR_MODEL", "gpt-5-mini")
-# A separate call reviews completed transcripts. Keeping this configurable lets
-# assessment runs use a stronger evaluator without changing the role-player.
-OPENAI_EVALUATOR_MODEL = os.getenv("OPENAI_EVALUATOR_MODEL", OPENAI_SIMULATOR_MODEL)
+OPENAI_SIMULATOR_MODEL = "gpt-5-mini"
+OPENAI_EVALUATOR_MODEL = "gpt-5.5"
+OPENAI_REFINER_MODEL = "gpt-5.5"

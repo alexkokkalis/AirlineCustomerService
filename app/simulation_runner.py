@@ -70,18 +70,24 @@ class ScenarioRunner:
         *,
         private_facts: dict[str, Any] | None = None,
         run_llm_review: bool = False,
+        agent_branch_id: str | None = None,
+        max_customer_turns: int | None = None,
     ) -> SimulationResult:
         """Run a deterministic opening then alternate one customer turn at a time."""
         scenario = get_scenario(scenario_id)
+        if max_customer_turns is not None and max_customer_turns < 1:
+            raise ValueError("max_customer_turns must be at least one when provided.")
+        effective_max_turns = min(scenario.max_turns, max_customer_turns or scenario.max_turns)
         run_id = create_run(source="scenario_simulation", scenario_id=scenario.id)
         append_run_event(
             run_id,
             "simulation_configured",
             scenario_id=scenario.id,
-            max_customer_turns=scenario.max_turns,
+            max_customer_turns=effective_max_turns,
             fixture_id=scenario.fixture_id,
             has_private_facts=bool(private_facts),
             llm_review_requested=run_llm_review,
+            agent_branch_id=agent_branch_id,
         )
         customer_turns = 0
         conversation_id: str | None = None
@@ -93,13 +99,16 @@ class ScenarioRunner:
                 if not fixture:
                     raise ScenarioFixtureError(f"Fixture {scenario.fixture_id!r} was not provisioned.")
                 private_facts = fixture.private_facts()
-            with self._session_factory(run_id=run_id) as session:
+            session_kwargs: dict[str, Any] = {"run_id": run_id}
+            if agent_branch_id:
+                session_kwargs["branch_id"] = agent_branch_id
+            with self._session_factory(**session_kwargs) as session:
                 # Fixed test data means the initial customer turn is reproducible
                 # and does not require an additional OpenAI API request.
                 session.send_message(scenario.initial_customer_message)
                 customer_turns = 1
 
-                while customer_turns < scenario.max_turns:
+                while customer_turns < effective_max_turns:
                     turn = self._simulator.next_turn(
                         scenario,
                         read_run_events(run_id),
@@ -124,7 +133,7 @@ class ScenarioRunner:
                         run_id,
                         "simulation_turn_limit_reached",
                         scenario_id=scenario.id,
-                        max_customer_turns=scenario.max_turns,
+                        max_customer_turns=effective_max_turns,
                     )
                 conversation_id = session.conversation_id
         except (CustomerSimulatorError, ElevenLabsChatError, ScenarioFixtureError, OSError, ValueError) as error:

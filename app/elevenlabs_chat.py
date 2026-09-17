@@ -18,6 +18,7 @@ from pathlib import Path
 from time import monotonic, sleep
 
 import certifi
+import httpx
 
 # Python installations on macOS can lack a usable system certificate store.
 # Pin WebSocket/API TLS validation to certifi's bundled Mozilla CA set so this
@@ -48,6 +49,30 @@ class ChatReply:
     messages: tuple[str, ...] = ()
 
 
+class _BranchConversation(Conversation):
+    """Conversation transport whose signed URL is pinned to an agent branch."""
+
+    def __init__(self, *args: object, branch_id: str, api_key: str, **kwargs: object) -> None:
+        self._branch_id = branch_id
+        self._api_key = api_key
+        super().__init__(*args, **kwargs)
+
+    def _get_signed_url(self) -> str:
+        """Use the documented signed-URL endpoint because this SDK version lacks branch_id."""
+        response = httpx.get(
+            "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url",
+            params={"agent_id": self.agent_id, "branch_id": self._branch_id},
+            headers={"xi-api-key": self._api_key},
+            timeout=10,
+            verify=certifi.where(),
+        )
+        response.raise_for_status()
+        signed_url = response.json().get("signed_url")
+        if not isinstance(signed_url, str) or not signed_url:
+            raise ElevenLabsChatError("ElevenLabs did not return a usable signed URL for the requested branch.")
+        return signed_url
+
+
 def _write_agent_event(event: dict) -> None:
     """Log operational metadata only; transcripts are stored by the test runner."""
     try:
@@ -75,12 +100,14 @@ class ElevenLabsChatSession:
         api_key: str | None = None,
         user_id: str | None = None,
         run_id: str | None = None,
+        branch_id: str | None = None,
         force_text_only: bool = False,
     ) -> None:
         self.agent_id = agent_id or ELEVENLABS_AGENT_ID
         self.api_key = api_key if api_key is not None else ELEVENLABS_API_KEY
         self.user_id = user_id or f"ionian-local-{uuid.uuid4()}"
         self.run_id = validate_run_id(run_id)
+        self.branch_id = branch_id.strip() if isinstance(branch_id, str) and branch_id.strip() else None
         self.force_text_only = force_text_only
         self._condition = threading.Condition()
         self._responses: list[str] = []
@@ -120,19 +147,31 @@ class ElevenLabsChatSession:
                 dynamic_variables={"run_id": self.run_id} if self.run_id else None,
             )
 
-        self._conversation = Conversation(
+        conversation_args = (
             ElevenLabs(api_key=self.api_key),
             self.agent_id,
-            user_id=self.user_id,
-            requires_auth=True,
-            config=config,
-            callback_agent_response=self._on_agent_response,
-            callback_end_session=self._on_end_session,
         )
+        conversation_kwargs = {
+            "user_id": self.user_id,
+            "requires_auth": True,
+            "config": config,
+            "callback_agent_response": self._on_agent_response,
+            "callback_end_session": self._on_end_session,
+        }
+        if self.branch_id:
+            self._conversation = _BranchConversation(
+                *conversation_args,
+                branch_id=self.branch_id,
+                api_key=self.api_key,
+                **conversation_kwargs,
+            )
+        else:
+            self._conversation = Conversation(*conversation_args, **conversation_kwargs)
         append_run_event(
             self.run_id,
             "elevenlabs_session_starting",
             agent_id=self.agent_id,
+            branch_id=self.branch_id,
             user_id=self.user_id,
         )
         try:
@@ -157,6 +196,7 @@ class ElevenLabsChatSession:
             self.run_id,
             "elevenlabs_session_connected",
             agent_id=self.agent_id,
+            branch_id=self.branch_id,
             conversation_id=self.conversation_id,
         )
         # Erling is configured with an automatic greeting. It is an agent turn,

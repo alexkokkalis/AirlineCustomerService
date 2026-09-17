@@ -94,8 +94,25 @@ def _is_explicit_confirmation(text: str) -> bool:
     return bool(re.search(r"\b(?:yes[,! ]+)?(?:confirm|confirmed|proceed|go ahead|do it)\b", normalized))
 
 
-def _check(check_id: str, passed: bool, message: str, *evidence: str) -> EvaluationCheck:
-    return EvaluationCheck(check_id, "pass" if passed else "fail", message, tuple(evidence))
+def _is_seat_selection_or_fallback(text: str) -> bool:
+    """Distinguish seat-choice consent from approval of the actual booking change."""
+    normalized = text.lower()
+    return bool(
+        re.search(r"\b(?:alternative|different|another|any)\s+(?:available\s+)?seat\b", normalized)
+        or "select any available" in normalized
+        or "whichever you confirm is available" in normalized
+    )
+
+
+def _is_final_reschedule_confirmation(text: str) -> bool:
+    """A seat-selection/fallback request is not final approval of the reschedule."""
+    return _is_explicit_confirmation(text) and not _is_seat_selection_or_fallback(text)
+
+
+def _check(
+    check_id: str, passed: bool, message: str, *evidence: str, status: CheckStatus | None = None
+) -> EvaluationCheck:
+    return EvaluationCheck(check_id, status or ("pass" if passed else "fail"), message, tuple(evidence))
 
 
 def _tool_events(events: list[dict[str, Any]]) -> list[tuple[int, dict[str, Any], str]]:
@@ -154,15 +171,43 @@ def _scenario_checks(scenario: Scenario, events: list[dict[str, Any]]) -> list[E
         )
     )
 
-    failed_calls = [f"{name} ({event.get('status_code')})" for _, event, name in calls if int(event.get("status_code", 500)) >= 400]
-    checks.append(
-        _check(
-            "tool_requests_succeeded",
-            not failed_calls,
-            "All recognised tool requests succeeded." if not failed_calls else "At least one tool request failed.",
-            *failed_calls,
+    recovered_conflicts: list[str] = []
+    unrecovered_failures: list[str] = []
+    for call_index, event, name in calls:
+        if int(event.get("status_code", 500)) < 400:
+            continue
+        later_success = any(
+            later_name == name and later_index > call_index and 200 <= int(later_event.get("status_code", 500)) < 300
+            for later_index, later_event, later_name in calls
         )
-    )
+        label = f"{name} ({event.get('status_code')})"
+        # A quote is non-mutating. A 409 can arise when a just-displayed seat
+        # becomes unavailable; a later successful quote proves safe recovery.
+        if name == "quote_reschedule" and int(event.get("status_code", 500)) == 409 and later_success:
+            recovered_conflicts.append(label)
+        else:
+            unrecovered_failures.append(label)
+    if unrecovered_failures:
+        checks.append(
+            _check(
+                "tool_requests_succeeded",
+                False,
+                "At least one recognised tool request failed without safe recovery.",
+                *unrecovered_failures,
+            )
+        )
+    elif recovered_conflicts:
+        checks.append(
+            _check(
+                "tool_requests_succeeded",
+                True,
+                "A transient non-mutating quote conflict was recovered safely.",
+                *recovered_conflicts,
+                status="warn",
+            )
+        )
+    else:
+        checks.append(_check("tool_requests_succeeded", True, "All recognised tool requests succeeded."))
 
     mutations = {"create_booking", "add_ancillary", "cancel_booking", "reschedule_booking"}
     unconfirmed: list[str] = []
@@ -210,17 +255,18 @@ def _scenario_checks(scenario: Scenario, events: list[dict[str, Any]]) -> list[E
         if quote_indexes:
             first_quote = quote_indexes[0]
             prior_confirmation = _latest_customer_message_before(events, first_quote)
+            final_confirmation = prior_confirmation and _is_final_reschedule_confirmation(prior_confirmation)
             confirmation_evidence = (
                 f'customer_confirmation={prior_confirmation!r}'
-                if prior_confirmation and _is_explicit_confirmation(prior_confirmation)
+                if final_confirmation
                 else "no_explicit_customer_confirmation_before_quote"
             )
             checks.append(
                 _check(
                     "quote_before_final_confirmation",
-                    not prior_confirmation or not _is_explicit_confirmation(prior_confirmation),
+                    not final_confirmation,
                     "The quote was obtained before the final customer confirmation."
-                    if not prior_confirmation or not _is_explicit_confirmation(prior_confirmation)
+                    if not final_confirmation
                     else "The quote was obtained only after final customer confirmation.",
                     confirmation_evidence,
                 )

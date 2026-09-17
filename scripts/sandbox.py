@@ -28,7 +28,11 @@ if str(ROOT) not in sys.path:
 
 from app.elevenlabs_chat import ElevenLabsChatError, ElevenLabsChatSession
 from app.customer_simulator import CustomerSimulator, CustomerSimulatorError
+from app.elevenlabs_agent_config import ElevenLabsAgentConfigClient, ElevenLabsAgentConfigError
+from app.config import ELEVENLABS_REFINEMENT_BRANCH_ID
 from app.evaluation import evaluate_run
+from app.refiner import RefinementPlanner, RefinementPlannerError
+from app.refinement_runner import RefinementRunner, RefinementRunnerError
 from app.llm_evaluator import LLMTranscriptEvaluator, LLMTranscriptEvaluatorError
 from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
 from app.scenarios import get_scenario
@@ -309,6 +313,39 @@ def review_run_with_llm(run_id: str) -> dict | None:
     return payload
 
 
+def plan_run_refinement(run_id: str) -> dict | None:
+    """Create one paid but non-mutating refiner proposal for an evaluated run.
+
+    The result is written beneath logs/refinements and is safe to inspect. It
+    does not change this repository, the database, or the ElevenLabs agent.
+    """
+    try:
+        result = RefinementPlanner().plan(run_id)
+    except (ValueError, RefinementPlannerError) as error:
+        print(f"\nRefinement planning error: {error}")
+        return None
+    payload = result.as_dict()
+    print_json(f"Refinement plan: {run_id}", payload)
+    return payload
+
+
+def inspect_refinement_branch_prompt(branch_id: str) -> dict | None:
+    """Read one ElevenLabs branch prompt without calling OpenAI or mutating it."""
+    try:
+        snapshot = ElevenLabsAgentConfigClient().get_system_prompt(branch_id=branch_id)
+    except (ValueError, ElevenLabsAgentConfigError) as error:
+        print(f"\nElevenLabs branch-read error: {error}")
+        return None
+    payload = {
+        "agent_id": snapshot.agent_id,
+        "branch_id": snapshot.branch_id,
+        "version_id": snapshot.version_id,
+        "system_prompt": snapshot.system_prompt,
+    }
+    print_json("ElevenLabs refinement-branch prompt", payload)
+    return payload
+
+
 def preview_customer_simulator(scenario_id: str = "pet_policy_in_cabin") -> None:
     """Make one paid OpenAI call to check the customer simulator in isolation.
 
@@ -340,7 +377,9 @@ def preview_customer_simulator(scenario_id: str = "pet_policy_in_cabin") -> None
     )
 
 
-def simulate_scenario(scenario_id: str = "pet_policy_in_cabin", *, with_llm_review: bool = False) -> None:
+def simulate_scenario(
+    scenario_id: str = "pet_policy_in_cabin", *, with_llm_review: bool = False, agent_branch_id: str | None = None
+) -> None:
     """Run one paid, end-to-end customer simulation against Erling.
 
     Fixture-backed action scenarios create fresh isolated test records. Set
@@ -348,7 +387,11 @@ def simulate_scenario(scenario_id: str = "pet_policy_in_cabin", *, with_llm_revi
     additional paid OpenAI evaluator call after the conversation ends.
     """
     try:
-        result = ScenarioRunner().run(scenario_id, run_llm_review=with_llm_review)
+        result = ScenarioRunner().run(
+            scenario_id,
+            run_llm_review=with_llm_review,
+            agent_branch_id=agent_branch_id,
+        )
     except SimulationRunnerError as error:
         print(f"\nScenario simulation error: {error}")
         return
@@ -370,6 +413,30 @@ def simulate_scenario(scenario_id: str = "pet_policy_in_cabin", *, with_llm_revi
 def simulate_assessment_scenario(scenario_id: str = "pet_policy_in_cabin") -> None:
     """Run a paid end-to-end assessment scenario including its LLM evaluation."""
     simulate_scenario(scenario_id, with_llm_review=True)
+
+
+def simulate_refinement_verification(scenario_id: str = "reschedule_existing_booking") -> None:
+    """Run one paid verification scenario against the configured refinement branch."""
+    if not ELEVENLABS_REFINEMENT_BRANCH_ID:
+        print("\nSet ELEVENLABS_REFINEMENT_BRANCH_ID in app/config.py before running branch verification.")
+        return
+    simulate_scenario(
+        scenario_id,
+        with_llm_review=True,
+        agent_branch_id=ELEVENLABS_REFINEMENT_BRANCH_ID,
+    )
+
+
+def run_refinement_loop(scenario_id: str = "reschedule_existing_booking", *, apply_changes: bool = False) -> dict | None:
+    """Run the bounded loop; keep apply_changes=False until the Git branch is ready."""
+    try:
+        result = RefinementRunner().run(scenario_id, apply_changes=apply_changes)
+    except RefinementRunnerError as error:
+        print(f"\nAutonomous refinement error: {error}")
+        return None
+    payload = result.as_dict()
+    print_json("Autonomous refinement result", payload)
+    return payload
 
 
 def main() -> None:
@@ -394,8 +461,13 @@ def main() -> None:
 
     # inspect_run_transcript("run_c3005bb49bfa4cea94f6a0aa1e9769a5")
 
-    review_run_with_llm("run_4462dc838e2d42e5b612a47c640e9e88")
+    # review_run_with_llm("run_84c30bc55c99447fbee789653948ea88")
+    # plan_run_refinement("run_4462dc838e2d42e5b612a47c640e9e88")
 
+    # inspect_refinement_branch_prompt("agtbrch_5201m2r4qcsdf7svbhtd0b2k16qc")
+
+    # simulate_refinement_verification()
+    plan_run_refinement("run_0b74d86281314ec29a3f22ef6ae97f3d")
 
 
 if __name__ == "__main__":

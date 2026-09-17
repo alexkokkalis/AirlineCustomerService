@@ -486,7 +486,7 @@ def health() -> dict:
 @app.get("/system/guardrails")
 def get_guardrails() -> dict:
     """Expose non-sensitive refinement limits for development and monitoring."""
-    return {"limits": GuardrailLimits.from_environment().as_dict()}
+    return {"limits": GuardrailLimits().as_dict()}
 
 
 @app.get("/policies")

@@ -154,6 +154,7 @@ keys.env
 logs/*.jsonl
 logs/runs/
 logs/evaluations/
+logs/refinements/
 data/guardrail_usage.json
 .sqlite
 *.sqlite3

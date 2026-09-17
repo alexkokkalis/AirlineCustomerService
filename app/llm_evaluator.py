@@ -17,6 +17,7 @@ from openai import OpenAI
 from app.config import OPENAI_API_KEY, OPENAI_EVALUATOR_MODEL
 from app.customer_simulator import visible_transcript
 from app.evaluation import EvaluationResult, tool_name_for_event
+from app.refinement_context import REFINEMENT_SYSTEM_CONTEXT
 from app.run_logging import append_run_event, read_run_events
 from app.scenarios import Scenario, get_scenario
 
@@ -139,8 +140,10 @@ REVIEW_SCHEMA = {
 }
 
 
-REVIEW_INSTRUCTIONS = """You are an independent quality evaluator for an airline customer-service agent.
+REVIEW_INSTRUCTIONS = f"""You are an independent quality evaluator for an airline customer-service agent.
 Score only the supplied evidence; never invent policy facts, tool results, hidden prompts, or parameter values.
+
+{REFINEMENT_SYSTEM_CONTEXT}
 
 Score each criterion from 1 to 10 and include specific short transcript or audit quotes for every failure:
 1. request_understanding — did Erling understand and correctly progress the customer goal?
@@ -312,10 +315,28 @@ class LLMTranscriptEvaluator:
                 input=json.dumps(_review_input(scenario, events, deterministic)),
                 text={"format": {"type": "json_schema", "name": "airline_transcript_review", "strict": True, "schema": REVIEW_SCHEMA}},
                 reasoning={"effort": "medium"},
-                max_output_tokens=1400,
+                max_output_tokens=2200,
                 store=False,
             )
-            payload = json.loads(response.output_text)
+            output_text = getattr(response, "output_text", "")
+            try:
+                payload = json.loads(output_text)
+            except json.JSONDecodeError as error:
+                incomplete_details = getattr(response, "incomplete_details", None)
+                append_run_event(
+                    run_id,
+                    "llm_evaluation_invalid_output",
+                    scenario_id=scenario_id,
+                    response_id=getattr(response, "id", None),
+                    output_characters=len(output_text) if isinstance(output_text, str) else 0,
+                    response_status=getattr(response, "status", None),
+                    incomplete_reason=(
+                        getattr(incomplete_details, "reason", None)
+                        if incomplete_details is not None
+                        else None
+                    ),
+                )
+                raise error
             criteria = {
                 criterion: CriterionReview(
                     score=payload["criteria"][criterion]["score"],
