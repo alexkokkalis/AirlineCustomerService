@@ -7,6 +7,7 @@ exact prompt replacement on the dedicated ElevenLabs branch.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -44,6 +45,11 @@ class AppliedRefinement:
     verification_scenario_id: str
     apply_path: str | None
     dry_run: bool
+    change_diff: str | None = None
+    before_text_digest: str | None = None
+    after_text_digest: str | None = None
+    source_version_id: str | None = None
+    result_version_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -51,6 +57,26 @@ class AppliedRefinement:
 
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:16]
+
+
+def refinement_unified_diff(plan: RefinementPlan) -> str | None:
+    """Return the exact, display-ready replacement diff for one plan.
+
+    We intentionally retain only the small approved replacement section rather
+    than a full system-prompt or source-file snapshot. That makes the audit
+    useful to the monitoring UI without duplicating unrelated content.
+    """
+    if plan.status != "refinement_needed" or plan.operation != "replace":
+        return None
+    target = "Erling system prompt" if plan.target == "erling_prompt" else plan.target_file
+    lines = difflib.unified_diff(
+        plan.expected_current_text.splitlines(),
+        plan.replacement_text.splitlines(),
+        fromfile=f"{target} (before)",
+        tofile=f"{target} (after)",
+        lineterm="",
+    )
+    return "\n".join(lines)
 
 
 def _current_git_branch() -> str:
@@ -90,6 +116,11 @@ def load_refinement_plan(run_id: str) -> RefinementPlan:
         return RefinementPlan(**payload)
     except (TypeError, ValueError) as error:
         raise RefinementApplyError("The requested refinement plan has an unsupported structure.") from error
+
+
+def load_refinement_diff(run_id: str) -> str | None:
+    """Build a UI-ready diff for a historic or newly created plan."""
+    return refinement_unified_diff(load_refinement_plan(run_id))
 
 
 class RefinementApplier:
@@ -180,6 +211,9 @@ class RefinementApplier:
             verification_scenario_id=plan.verification_scenario_id,
             apply_path=str(_plan_apply_path(plan.run_id)) if apply else None,
             dry_run=not apply,
+            change_diff=refinement_unified_diff(plan),
+            before_text_digest=_digest(plan.expected_current_text),
+            after_text_digest=_digest(plan.replacement_text),
         )
 
     def _apply_prompt(self, plan: RefinementPlan, *, apply: bool) -> AppliedRefinement:
@@ -201,6 +235,9 @@ class RefinementApplier:
                 raise RefinementApplyError("Prompt update was sent but could not be re-read for verification.") from error
             if verified.system_prompt != updated_prompt:
                 raise RefinementApplyError("ElevenLabs did not persist the exact verified prompt update.")
+            result_version_id = verified.version_id
+        else:
+            result_version_id = None
         return AppliedRefinement(
             run_id=plan.run_id,
             status="applied" if apply else "dry_run_validated",
@@ -210,6 +247,11 @@ class RefinementApplier:
             verification_scenario_id=plan.verification_scenario_id,
             apply_path=str(_plan_apply_path(plan.run_id)) if apply else None,
             dry_run=not apply,
+            change_diff=refinement_unified_diff(plan),
+            before_text_digest=_digest(plan.expected_current_text),
+            after_text_digest=_digest(plan.replacement_text),
+            source_version_id=snapshot.version_id,
+            result_version_id=result_version_id,
         )
 
     def _update_prompt(self, *, branch_id: str, prompt: str, version_description: str) -> None:

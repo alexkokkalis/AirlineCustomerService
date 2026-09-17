@@ -32,6 +32,7 @@ from app.elevenlabs_agent_config import ElevenLabsAgentConfigClient, ElevenLabsA
 from app.config import ELEVENLABS_REFINEMENT_BRANCH_ID
 from app.evaluation import evaluate_run
 from app.refiner import RefinementPlanner, RefinementPlannerError
+from app.refinement_applier import RefinementApplyError, load_refinement_diff
 from app.refinement_runner import RefinementRunner, RefinementRunnerError
 from app.llm_evaluator import LLMTranscriptEvaluator, LLMTranscriptEvaluatorError
 from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
@@ -329,6 +330,18 @@ def plan_run_refinement(run_id: str) -> dict | None:
     return payload
 
 
+def inspect_refinement_diff(run_id: str) -> str | None:
+    """Print the exact before/after section proposed for one refinement run."""
+    try:
+        change_diff = load_refinement_diff(run_id)
+    except RefinementApplyError as error:
+        print(f"\nRefinement diff error: {error}")
+        return None
+    print(f"\n--- Refinement diff: {run_id} ---")
+    print(change_diff or "No change was proposed for this run.")
+    return change_diff
+
+
 def inspect_refinement_branch_prompt(branch_id: str) -> dict | None:
     """Read one ElevenLabs branch prompt without calling OpenAI or mutating it."""
     try:
@@ -467,7 +480,13 @@ def main() -> None:
     # inspect_refinement_branch_prompt("agtbrch_5201m2r4qcsdf7svbhtd0b2k16qc")
 
     # simulate_refinement_verification()
-    plan_run_refinement("run_0b74d86281314ec29a3f22ef6ae97f3d")
+    # plan_run_refinement("run_0b74d86281314ec29a3f22ef6ae97f3d")
+    # inspect_refinement_diff("run_fdcda323a97a434fbe16537825d38dd2")
+
+    run_refinement_loop(
+        "add_checked_bag_to_booking",
+        apply_changes=False,
+    )
 
 
 if __name__ == "__main__":
