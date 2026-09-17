@@ -26,6 +26,18 @@ ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = ROOT / "data" / "ionian_airlines.db"
 API_EVENT_LOG_PATH = ROOT / "logs" / "api_events.jsonl"
 AGENT_API_PATH_PREFIXES = ("/policies", "/flights", "/bookings")
+SAFE_AUDIT_VALUE_FIELDS = {
+    "ancillary_type",
+    "booking_segment_id",
+    "combined_weight_kg",
+    "confirmation",
+    "fare_tier",
+    "flight_id",
+    "new_flight_id",
+    "option",
+    "seat_number",
+    "weight_kg",
+}
 FARE_CABINS = {"economy_light": "economy", "economy_classic": "economy", "economy_plus": "economy", "business": "business"}
 MULTIPLIERS = {"economy_light": 1.0, "economy_classic": 1.2, "economy_plus": 1.55, "business": 3.2}
 PolicyTopic = Literal[
@@ -76,6 +88,40 @@ def write_api_event(event: dict) -> None:
         pass
 
 
+async def request_parameter_shape(request: Request) -> dict[str, object]:
+    """Return safe parameter evidence while excluding customer data and secrets."""
+    result: dict[str, object] = {
+        "query_parameter_names": sorted(request.query_params.keys()),
+        "body_parameter_paths": [],
+        "body_non_sensitive_values": {},
+    }
+    if request.method not in {"POST", "PUT", "PATCH"}:
+        return result
+    try:
+        payload = json.loads((await request.body()).decode() or "null")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return result
+
+    def collect(value: object, prefix: str = "") -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                path = f"{prefix}.{key}" if prefix else str(key)
+                paths = result["body_parameter_paths"]
+                assert isinstance(paths, list)
+                paths.append(path)
+                if key in SAFE_AUDIT_VALUE_FIELDS and isinstance(child, (str, int, float, bool)):
+                    safe_values = result["body_non_sensitive_values"]
+                    assert isinstance(safe_values, dict)
+                    safe_values[path] = child
+                collect(child, path)
+
+    collect(payload)
+    paths = result["body_parameter_paths"]
+    assert isinstance(paths, list)
+    paths.sort()
+    return result
+
+
 @app.middleware("http")
 async def log_api_request(request: Request, call_next):
     """Authenticate agent tools and log method, route, status, duration, and request ID."""
@@ -85,6 +131,7 @@ async def log_api_request(request: Request, call_next):
     status_code = 500
     error_type = None
     is_agent_route = request.url.path.startswith(AGENT_API_PATH_PREFIXES)
+    parameter_shape = await request_parameter_shape(request) if run_id and is_agent_route else {}
     if run_id and is_agent_route:
         append_run_event(
             run_id,
@@ -93,6 +140,7 @@ async def log_api_request(request: Request, call_next):
             request_id=request_id,
             method=request.method,
             path=request.url.path,
+            **parameter_shape,
         )
     try:
         supplied_token = request.headers.get("X-Ionian-Tool-Token")

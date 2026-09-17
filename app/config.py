@@ -23,3 +23,6 @@ ELEVENLABS_AGENT_ID = os.getenv("ELEVENLABS_AGENT_ID")
 # from Erling, which continues to run in ElevenLabs Chat Mode.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_SIMULATOR_MODEL = os.getenv("OPENAI_SIMULATOR_MODEL", "gpt-5-mini")
+# A separate call reviews completed transcripts. Keeping this configurable lets
+# assessment runs use a stronger evaluator without changing the role-player.
+OPENAI_EVALUATOR_MODEL = os.getenv("OPENAI_EVALUATOR_MODEL", OPENAI_SIMULATOR_MODEL)

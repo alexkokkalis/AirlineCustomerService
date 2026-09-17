@@ -153,6 +153,7 @@ activemq-data/
 keys.env
 logs/*.jsonl
 logs/runs/
+logs/evaluations/
 data/guardrail_usage.json
 .sqlite
 *.sqlite3

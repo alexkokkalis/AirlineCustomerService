@@ -28,6 +28,8 @@ if str(ROOT) not in sys.path:
 
 from app.elevenlabs_chat import ElevenLabsChatError, ElevenLabsChatSession
 from app.customer_simulator import CustomerSimulator, CustomerSimulatorError
+from app.evaluation import evaluate_run
+from app.llm_evaluator import LLMTranscriptEvaluator, LLMTranscriptEvaluatorError
 from app.run_logging import append_run_event, create_run, read_run_events, run_log_path
 from app.scenarios import get_scenario
 from app.simulation_runner import ScenarioRunner, SimulationRunnerError
@@ -286,6 +288,27 @@ def inspect_run_transcript(run_id: str) -> list[dict]:
     return events
 
 
+def inspect_run_evaluation(run_id: str) -> dict:
+    """Evaluate a previous scenario run and print its durable assessment report."""
+    result = evaluate_run(run_id)
+    payload = result.as_dict()
+    print_json(f"Run evaluation: {run_id}", payload)
+    return payload
+
+
+def review_run_with_llm(run_id: str) -> dict | None:
+    """Run the paid, assessment-required independent transcript review once."""
+    try:
+        deterministic = evaluate_run(run_id)
+        result = LLMTranscriptEvaluator().evaluate(run_id, deterministic)
+    except (ValueError, LLMTranscriptEvaluatorError) as error:
+        print(f"\nLLM evaluation error: {error}")
+        return None
+    payload = result.as_dict()
+    print_json(f"LLM transcript review: {run_id}", payload)
+    return payload
+
+
 def preview_customer_simulator(scenario_id: str = "pet_policy_in_cabin") -> None:
     """Make one paid OpenAI call to check the customer simulator in isolation.
 
@@ -317,15 +340,15 @@ def preview_customer_simulator(scenario_id: str = "pet_policy_in_cabin") -> None
     )
 
 
-def simulate_scenario(scenario_id: str = "pet_policy_in_cabin") -> None:
+def simulate_scenario(scenario_id: str = "pet_policy_in_cabin", *, with_llm_review: bool = False) -> None:
     """Run one paid, end-to-end customer simulation against Erling.
 
-    The default policy-only scenario is safe for a first live test: it does not
-    create or change booking data. Fixture-backed action scenarios are blocked
-    until their isolated-fixture setup is added.
+    Fixture-backed action scenarios create fresh isolated test records. Set
+    ``with_llm_review`` only for an assessment/refinement run, as it makes one
+    additional paid OpenAI evaluator call after the conversation ends.
     """
     try:
-        result = ScenarioRunner().run(scenario_id)
+        result = ScenarioRunner().run(scenario_id, run_llm_review=with_llm_review)
     except SimulationRunnerError as error:
         print(f"\nScenario simulation error: {error}")
         return
@@ -338,8 +361,15 @@ def simulate_scenario(scenario_id: str = "pet_policy_in_cabin") -> None:
             "customer_turns": result.customer_turns,
             "conversation_id": result.conversation_id,
             "transcript_path": result.transcript_path,
+            "evaluation": result.evaluation.as_dict() if result.evaluation else None,
+            "llm_evaluation": result.llm_evaluation.as_dict() if result.llm_evaluation else None,
         },
     )
+
+
+def simulate_assessment_scenario(scenario_id: str = "pet_policy_in_cabin") -> None:
+    """Run a paid end-to-end assessment scenario including its LLM evaluation."""
+    simulate_scenario(scenario_id, with_llm_review=True)
 
 
 def main() -> None:
@@ -359,9 +389,12 @@ def main() -> None:
     """
     Paid OpenAI + ElevenLabs run. The default scenario is policy-only.
     """
-    simulate_scenario("reschedule_existing_booking")
+    # simulate_scenario("create_business_booking")
+    # simulate_assessment_scenario("reschedule_existing_booking")
 
-    # inspect_run_transcript("run_9a8558cca14a40b380a4f1d62b632b80")
+    # inspect_run_transcript("run_c3005bb49bfa4cea94f6a0aa1e9769a5")
+
+    review_run_with_llm("run_4462dc838e2d42e5b612a47c640e9e88")
 
 
 
