@@ -1,0 +1,15 @@
+{
+  "run_id": "run_d5f1ae2c2e394acab9771ff73f966b32",
+  "status": "applied",
+  "target": "erling_prompt",
+  "target_file": "elevenlabs_system_prompt",
+  "branch_id": "agtbrch_5201m2r4qcsdf7svbhtd0b2k16qc",
+  "verification_scenario_id": "reschedule_existing_booking",
+  "apply_path": "/Users/alexkokkalis/Desktop/Projects/AirlineCustomerService/AirlineCustomerService/logs/refinements/run_d5f1ae2c2e394acab9771ff73f966b32.applied.json",
+  "dry_run": false,
+  "change_diff": "--- Erling system prompt (before)\n+++ Erling system prompt (after)\n@@ -1 +1 @@\n-- For a reschedule, retrieve the booking, retrieve the relevant voluntary-change policy, search eligible replacement flights on the same route, and check the selected replacement seat. After the customer chooses a replacement flight and seat, call quote_reschedule before presenting any final amount due or asking for final confirmation; do not derive the final cost from fare or policy details.\n+- For a reschedule, retrieve the booking, then call get_policy for the voluntary-change policy before searching flights, checking seats, or quoting. After the customer chooses a replacement flight and seat, call quote_reschedule before presenting any final amount due or asking for final confirmation; do not derive the final cost from fare or policy details.",
+  "before_text_digest": "6d0c5340aac49384",
+  "after_text_digest": "b7f0764c1b645316",
+  "source_version_id": "agtvrsn_4201m2rgcgh8erf9fp7wwga66exv",
+  "result_version_id": "agtvrsn_0601m2rh0zazeksb2q73864j0neq"
+}

@@ -7,8 +7,9 @@ validated update; the next iteration supplies the verification evidence.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Any, Sequence
+from dataclasses import dataclass
+from typing import Any
+from uuid import uuid4
 
 from app.config import ELEVENLABS_REFINEMENT_BRANCH_ID
 from app.guardrails import GuardrailExceeded, GuardrailLimits, RunGuardrails
@@ -16,6 +17,7 @@ from app.refinement_applier import AppliedRefinement, RefinementApplier, Refinem
 from app.refiner import RefinementPlan, RefinementPlanner, RefinementPlannerError
 from app.run_logging import append_run_event, read_run_events
 from app.simulation_runner import ScenarioRunner, SimulationResult, SimulationRunnerError
+from app.pipeline_summary import write_pipeline_summary
 
 
 class RefinementRunnerError(RuntimeError):
@@ -48,6 +50,8 @@ class RefinementIteration:
 
 @dataclass(frozen=True)
 class RefinementRunResult:
+    pipeline_id: str
+    pipeline_summary_path: str
     outcome: str
     iterations: tuple[RefinementIteration, ...]
     guardrails: dict[str, int]
@@ -56,6 +60,8 @@ class RefinementRunResult:
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            "pipeline_id": self.pipeline_id,
+            "pipeline_summary_path": self.pipeline_summary_path,
             "outcome": self.outcome,
             "iterations": [iteration.as_dict() for iteration in self.iterations],
             "guardrails": self.guardrails,
@@ -105,19 +111,36 @@ class RefinementRunner:
         current_scenario_id = scenario_id
         iterations: list[RefinementIteration] = []
         applied_changes = 0
+        pipeline_id = f"pipeline_{uuid4().hex}"
+
+        def complete(outcome: str, *, stopped_reason: str | None = None) -> RefinementRunResult:
+            summary_path = write_pipeline_summary(
+                pipeline_id=pipeline_id,
+                scenario_id=scenario_id,
+                outcome=outcome,
+                iterations=(iteration.as_dict() for iteration in iterations),
+                guardrails=self.limits.as_dict(),
+                applied_changes=applied_changes,
+                dry_run=not apply_changes,
+                stopped_reason=stopped_reason,
+            )
+            return RefinementRunResult(
+                pipeline_id,
+                str(summary_path),
+                outcome,
+                tuple(iterations),
+                self.limits.as_dict(),
+                applied_changes,
+                not apply_changes,
+            )
+
         try:
             for iteration_number in range(1, self.limits.max_iterations + 1):
                 # ``max_iterations`` may be higher than the scenario budget.
                 # Reaching that budget is an expected bounded outcome, not an
                 # exceptional attempt to start one more live conversation.
                 if self.guardrails.scenarios >= self.limits.max_scenarios_per_run:
-                    return RefinementRunResult(
-                        "scenario_limit_reached",
-                        tuple(iterations),
-                        self.limits.as_dict(),
-                        applied_changes,
-                        not apply_changes,
-                    )
+                    return complete("scenario_limit_reached")
                 self.guardrails.start_scenario()
                 simulation = self._scenario_runner.run(
                     current_scenario_id,
@@ -135,13 +158,7 @@ class RefinementRunner:
                 if not simulation.llm_evaluation:
                     append_run_event(simulation.run_id, "refinement_stopped", reason="llm_evaluation_unavailable")
                     iterations.append(RefinementIteration(iteration_number, simulation, None, None))
-                    return RefinementRunResult(
-                        "llm_evaluation_unavailable",
-                        tuple(iterations),
-                        self.limits.as_dict(),
-                        applied_changes,
-                        not apply_changes,
-                    )
+                    return complete("llm_evaluation_unavailable")
 
                 self.guardrails.register_agent_call()  # the paid Refiner request about to occur
                 plan = self._planner.plan(simulation.run_id, simulation.evaluation)
@@ -156,29 +173,21 @@ class RefinementRunner:
                     dry_run=not apply_changes,
                 )
                 if plan.status == "no_change":
-                    return RefinementRunResult(
-                        "passed",
-                        tuple(iterations),
-                        self.limits.as_dict(),
-                        applied_changes,
-                        not apply_changes,
-                    )
+                    return complete("passed")
                 if not apply_changes:
-                    return RefinementRunResult(
-                        "plan_validated_not_applied",
-                        tuple(iterations),
-                        self.limits.as_dict(),
-                        applied_changes,
-                        True,
-                    )
+                    return complete("plan_validated_not_applied")
                 applied_changes += 1
                 current_scenario_id = plan.verification_scenario_id
-            return RefinementRunResult(
-                "iteration_limit_reached",
-                tuple(iterations),
-                self.limits.as_dict(),
-                applied_changes,
-                not apply_changes,
-            )
+            return complete("iteration_limit_reached")
         except (GuardrailExceeded, SimulationRunnerError, RefinementPlannerError, RefinementApplyError) as error:
+            write_pipeline_summary(
+                pipeline_id=pipeline_id,
+                scenario_id=scenario_id,
+                outcome="stopped_safely",
+                iterations=(iteration.as_dict() for iteration in iterations),
+                guardrails=self.limits.as_dict(),
+                applied_changes=applied_changes,
+                dry_run=not apply_changes,
+                stopped_reason=str(error),
+            )
             raise RefinementRunnerError(f"Autonomous refinement stopped safely: {error}") from error

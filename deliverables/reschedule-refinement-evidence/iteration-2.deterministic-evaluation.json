@@ -1,0 +1,61 @@
+{
+  "run_id": "run_d8ce615c9acf4f08a88eed2c33dadae9",
+  "scenario_id": "reschedule_existing_booking",
+  "overall_status": "passed",
+  "checks": [
+    {
+      "id": "terminal_outcome",
+      "status": "pass",
+      "message": "Customer simulation ended naturally.",
+      "evidence": [
+        "outcome=customer_ended"
+      ]
+    },
+    {
+      "id": "required_tools",
+      "status": "pass",
+      "message": "All required tools succeeded.",
+      "evidence": []
+    },
+    {
+      "id": "forbidden_tools",
+      "status": "pass",
+      "message": "No forbidden tools were called.",
+      "evidence": []
+    },
+    {
+      "id": "tool_requests_succeeded",
+      "status": "pass",
+      "message": "All recognised tool requests succeeded.",
+      "evidence": []
+    },
+    {
+      "id": "mutation_confirmation",
+      "status": "pass",
+      "message": "Every completed booking change followed valid customer authorization.",
+      "evidence": []
+    },
+    {
+      "id": "no_duplicate_mutation",
+      "status": "pass",
+      "message": "No state-changing action was duplicated.",
+      "evidence": []
+    },
+    {
+      "id": "quote_before_reschedule",
+      "status": "pass",
+      "message": "A successful non-mutating quote preceded the reschedule.",
+      "evidence": []
+    },
+    {
+      "id": "quote_before_final_confirmation",
+      "status": "pass",
+      "message": "The quote was obtained before the final customer confirmation.",
+      "evidence": [
+        "no_explicit_customer_confirmation_before_quote"
+      ]
+    }
+  ],
+  "transcript_path": "/Users/alexkokkalis/Desktop/Projects/AirlineCustomerService/AirlineCustomerService/logs/runs/run_d8ce615c9acf4f08a88eed2c33dadae9.jsonl",
+  "evaluation_path": "/Users/alexkokkalis/Desktop/Projects/AirlineCustomerService/AirlineCustomerService/logs/evaluations/run_d8ce615c9acf4f08a88eed2c33dadae9.json"
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_type": "redacted_pipeline_summary_example",
+  "pipeline_id": "pipeline_recorded_reschedule_example",
+  "scenario_id": "reschedule_existing_booking",
+  "outcome": "passed",
+  "dry_run": false,
+  "guardrails": {
+    "max_iterations": 5,
+    "max_scenarios_per_run": 3,
+    "max_turns_per_conversation": 12,
+    "max_tool_calls_per_conversation": 10,
+    "max_agent_calls_per_run": 40
+  },
+  "applied_changes": 1,
+  "iterations": [
+    {
+      "iteration": 1,
+      "outcome": "customer_ended",
+      "deterministic": {
+        "overall_status": "failed",
+        "failed_checks": [
+          {
+            "id": "required_tools",
+            "evidence": [
+              "missing=get_policy"
+            ]
+          }
+        ]
+      },
+      "llm_evaluation": {
+        "overall_score": 8,
+        "criterion_scores": {
+          "request_understanding": 8,
+          "api_usage": 7,
+          "outcome_confirmation": 9,
+          "natural_end_to_end": 9
+        },
+        "decision": "prompt_refinement_needed",
+        "root_causes": [
+          "prompt_issue"
+        ],
+        "failure": {
+          "criterion": "api_usage",
+          "explanation": "The reschedule workflow completed without a recorded get_policy call, despite the scenario requiring the voluntary-change policy before quoting a change outcome.",
+          "recommended_change": "Require get_policy immediately after booking verification and before quote_reschedule."
+        }
+      },
+      "refinement": {
+        "status": "refinement_needed",
+        "target": "erling_prompt",
+        "target_file": "elevenlabs_system_prompt",
+        "operation": "replace",
+        "rationale": "This is a tool-sequencing/guidance issue for Erling, not an API failure.",
+        "expected_effect": "Retrieve the voluntary-change policy before continuing the reschedule workflow.",
+        "apply_status": "applied",
+        "change_diff": "- For a reschedule, retrieve the booking, retrieve the relevant voluntary-change policy, search eligible replacement flights on the same route, and check the selected replacement seat.\n+ For a reschedule, retrieve the booking, then call get_policy for the voluntary-change policy before searching flights, checking seats, or quoting."
+      }
+    },
+    {
+      "iteration": 2,
+      "outcome": "customer_ended",
+      "deterministic": {
+        "overall_status": "passed",
+        "failed_checks": []
+      },
+      "llm_evaluation": {
+        "overall_score": 10,
+        "criterion_scores": {
+          "request_understanding": 10,
+          "api_usage": 10,
+          "outcome_confirmation": 10,
+          "natural_end_to_end": 10
+        },
+        "decision": "passed",
+        "root_causes": [],
+        "failures": []
+      },
+      "refinement": {
+        "status": "no_change",
+        "target": "none",
+        "apply_status": "no_change"
+      }
+    }
+  ],
+  "performance_improvement": {
+    "overall_score_before": 8,
+    "overall_score_after": 10,
+    "overall_score_delta": 2,
+    "deterministic_status_before": "failed",
+    "deterministic_status_after": "passed",
+    "decision_before": "prompt_refinement_needed",
+    "decision_after": "passed",
+    "root_causes_resolved": [
+      "prompt_issue"
+    ]
+  },
+  "redaction_note": "This tracked export omits provider conversation IDs, absolute local paths, and raw customer transcript text. The full generated pipeline summary and per-run audit files remain under the ignored logs/ directory."
+}

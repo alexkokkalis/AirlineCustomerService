@@ -1,0 +1,20 @@
+{
+  "run_id": "run_d5f1ae2c2e394acab9771ff73f966b32",
+  "scenario_id": "reschedule_existing_booking",
+  "model": "gpt-5.5",
+  "source_decision": "prompt_refinement_needed",
+  "status": "refinement_needed",
+  "target": "erling_prompt",
+  "operation": "replace",
+  "target_file": "elevenlabs_system_prompt",
+  "expected_current_text": "- For a reschedule, retrieve the booking, retrieve the relevant voluntary-change policy, search eligible replacement flights on the same route, and check the selected replacement seat. After the customer chooses a replacement flight and seat, call quote_reschedule before presenting any final amount due or asking for final confirmation; do not derive the final cost from fare or policy details.",
+  "replacement_text": "- For a reschedule, retrieve the booking, then call get_policy for the voluntary-change policy before searching flights, checking seats, or quoting. After the customer chooses a replacement flight and seat, call quote_reschedule before presenting any final amount due or asking for final confirmation; do not derive the final cost from fare or policy details.",
+  "rationale": "The run failed because the required get_policy tool was not recorded. The audit shows get_booking, search_flights, get_available_seats, quote_reschedule, and reschedule_booking succeeded, but deterministic evaluation reports missing=get_policy. This is a tool sequencing/guidance issue for Erling, not an API failure.",
+  "expected_effect": "Erling should make the voluntary-change policy lookup immediately after verifying the booking and before continuing the reschedule workflow, satisfying the required policy retrieval before quote_reschedule/reschedule_booking.",
+  "verification_scenario_id": "reschedule_existing_booking",
+  "response_id": "resp_0a1f518e3d22559d016aac4debbedc87d292b6312801696364",
+  "input_tokens": 5232,
+  "output_tokens": 513,
+  "plan_path": "/Users/alexkokkalis/Desktop/Projects/AirlineCustomerService/AirlineCustomerService/logs/refinements/run_d5f1ae2c2e394acab9771ff73f966b32.plan.json",
+  "dry_run": true
+}

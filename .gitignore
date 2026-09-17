@@ -155,6 +155,7 @@ logs/*.jsonl
 logs/runs/
 logs/evaluations/
 logs/refinements/
+logs/pipeline_summaries/
 data/guardrail_usage.json
 .sqlite
 *.sqlite3

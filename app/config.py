@@ -24,6 +24,11 @@ ELEVENLABS_AGENT_ID = os.getenv("ELEVENLABS_AGENT_ID")
 # prompt update. Set the branch ID here after creating that branch in ElevenLabs.
 ELEVENLABS_REFINEMENT_BRANCH_ID = "agtbrch_5201m2r4qcsdf7svbhtd0b2k16qc"
 
+# Public development infrastructure setting, not a secret. Reserve a static
+# domain in the ngrok dashboard, then set its hostname here (without https://)
+# so scripts/run_local.sh always starts the same webhook endpoint.
+NGROK_DOMAIN = "stirpicultural-unglamorously-chery.ngrok-free.dev"
+
 # OpenAI model roles are application choices, not environment secrets. Erling
 # continues to run in ElevenLabs Chat Mode.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
