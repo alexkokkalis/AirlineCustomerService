@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from openai import OpenAI
 
-from app.config import OPENAI_API_KEY, OPENAI_EVALUATOR_MODEL
+from app.config import LLM_PASS_THRESHOLD, OPENAI_API_KEY, OPENAI_EVALUATOR_MODEL
 from app.customer_simulator import visible_transcript
 from app.evaluation import EvaluationResult, tool_name_for_event
 from app.refinement_context import REFINEMENT_SYSTEM_CONTEXT
@@ -184,12 +184,21 @@ def _decision(criteria: dict[CriterionId, CriterionReview], failures: tuple[Fail
     """Apply the agreed quality gate independently of the LLM's prose judgment."""
     minimum_score = min(review.score for review in criteria.values())
     root_causes = tuple(sorted({failure.root_cause for failure in failures}))
-    if minimum_score >= 8 and not failures:
-        return ReviewDecisionResult("passed", minimum_score, 0, root_causes, "All criteria meet the score threshold and no failures were found.")
+    if minimum_score >= LLM_PASS_THRESHOLD and not failures:
+        return ReviewDecisionResult(
+            "passed",
+            minimum_score,
+            0,
+            root_causes,
+            f"All criteria meet the score threshold of {LLM_PASS_THRESHOLD} and no failures were found.",
+        )
     causes = set(root_causes)
     if not failures:
         decision: ReviewDecision = "code_fix_needed"
-        reason = "A criterion scored below 8 without a classified failure; the evaluator or orchestration needs automated correction."
+        reason = (
+            f"A criterion scored below the threshold of {LLM_PASS_THRESHOLD} without a classified failure; "
+            "the evaluator or orchestration needs automated correction."
+        )
     elif causes == {"prompt_issue"}:
         decision: ReviewDecision = "prompt_refinement_needed"
         reason = failures[0].explanation

@@ -35,3 +35,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_SIMULATOR_MODEL = "gpt-5-mini"
 OPENAI_EVALUATOR_MODEL = "gpt-5.5"
 OPENAI_REFINER_MODEL = "gpt-5.5"
+
+# Every LLM evaluation criterion must meet this score and have no material
+# failure finding for a run to pass the qualitative quality gate.
+LLM_PASS_THRESHOLD = 8
